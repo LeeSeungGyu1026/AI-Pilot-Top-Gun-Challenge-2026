@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BT Probe Viewer</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #111318;
+      --panel: #191d24;
+      --line: #2b313b;
+      --text: #eef2f7;
+      --muted: #9aa6b2;
+      --own: #4dd4ff;
+      --target: #ff6b5f;
+      --vp: #ffe066;
+      --good: #68df9b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+    }
+    .app {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 340px;
+      height: 100vh;
+    }
+    .stage {
+      position: relative;
+      min-width: 0;
+      background:
+        linear-gradient(rgba(255,255,255,.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.045) 1px, transparent 1px),
+        radial-gradient(circle at 35% 25%, rgba(77,212,255,.12), transparent 36%),
+        #0d1015;
+      background-size: 56px 56px, 56px 56px, auto, auto;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    .hud {
+      position: absolute;
+      left: 18px;
+      top: 16px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      pointer-events: none;
+    }
+    .pill {
+      border: 1px solid rgba(255,255,255,.12);
+      background: rgba(17,19,24,.74);
+      padding: 7px 10px;
+      border-radius: 8px;
+      font-size: 13px;
+      color: var(--muted);
+      backdrop-filter: blur(8px);
+    }
+    .pill strong { color: var(--text); font-weight: 650; }
+    .side {
+      border-left: 1px solid var(--line);
+      background: var(--panel);
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .top {
+      padding: 18px 18px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    h1 {
+      margin: 0 0 4px;
+      font-size: 19px;
+      letter-spacing: 0;
+    }
+    .sub {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line);
+    }
+    button {
+      border: 1px solid #343b47;
+      background: #222833;
+      color: var(--text);
+      height: 36px;
+      border-radius: 7px;
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    button.active {
+      border-color: rgba(77,212,255,.75);
+      background: rgba(77,212,255,.16);
+    }
+    .playbar {
+      display: grid;
+      grid-template-columns: 44px 1fr 48px;
+      gap: 10px;
+      align-items: center;
+      padding: 0 18px 15px;
+      border-bottom: 1px solid var(--line);
+    }
+    .icon {
+      font-size: 17px;
+      line-height: 1;
+    }
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--own);
+    }
+    .stepnum {
+      color: var(--muted);
+      font-size: 13px;
+      text-align: right;
+    }
+    .metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      padding: 16px 18px;
+    }
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      min-height: 72px;
+      background: #151922;
+    }
+    .label {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+    .value {
+      font-size: 22px;
+      font-variant-numeric: tabular-nums;
+    }
+    .wide { grid-column: 1 / -1; }
+    .legend {
+      padding: 0 18px 14px;
+      display: grid;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .key { display: flex; align-items: center; gap: 8px; }
+    .swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--text);
+    }
+    .own { background: var(--own); }
+    .target { background: var(--target); }
+    .vp { background: var(--vp); }
+    .note {
+      margin-top: auto;
+      padding: 14px 18px 18px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      border-top: 1px solid var(--line);
+    }
+    @media (max-width: 860px) {
+      body { overflow: auto; }
+      .app { grid-template-columns: 1fr; grid-template-rows: 58vh auto; height: auto; min-height: 100vh; }
+      .side { border-left: 0; border-top: 1px solid var(--line); }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="stage">
+      <canvas id="view"></canvas>
+      <div class="hud">
+        <div class="pill">분기 <strong id="branch">-</strong></div>
+        <div class="pill">상황 <strong id="caseName">-</strong></div>
+      </div>
+    </section>
+    <aside class="side">
+      <div class="top">
+        <h1>BT Probe Viewer</h1>
+        <p class="sub">AIP_BASE_target.dll 프로브에서 확인한 분기 동작을 눈으로 보는 리플레이입니다.</p>
+      </div>
+      <div class="controls">
+        <button id="default_pursuit" class="active">추적</button>
+        <button id="low_altitude_recover">저고도</button>
+        <button id="defensive_close">방어</button>
+      </div>
+      <div class="playbar">
+        <button id="play" class="icon" title="재생/일시정지">▶</button>
+        <input id="scrub" type="range" min="0" max="79" value="0">
+        <div id="step" class="stepnum">0/79</div>
+      </div>
+      <div class="metrics">
+        <div class="metric">
+          <div class="label">거리</div>
+          <div id="distance" class="value">-</div>
+        </div>
+        <div class="metric">
+          <div class="label">자기 고도</div>
+          <div id="altitude" class="value">-</div>
+        </div>
+        <div class="metric">
+          <div class="label">Throttle</div>
+          <div id="throttle" class="value">-</div>
+        </div>
+        <div class="metric">
+          <div class="label">Pitch CMD</div>
+          <div id="pitch" class="value">-</div>
+        </div>
+        <div class="metric wide">
+          <div class="label">현재 VP</div>
+          <div id="vpText" class="value">-</div>
+        </div>
+      </div>
+      <div class="legend">
+        <div class="key"><span class="swatch own"></span>Ownship 경로</div>
+        <div class="key"><span class="swatch target"></span>Target 경로</div>
+        <div class="key"><span class="swatch vp"></span>Behavior Tree가 지정한 Virtual Point</div>
+      </div>
+      <div class="note">
+        이 화면은 정식 JSBSim 점수 평가가 아니라 BT 명령과 분기 확인용입니다. 실제 환경 평가는 Python 패키지 의존성 설치 후 run_local_dogfight.py로 돌리면 됩니다.
+      </div>
+    </aside>
+  </main>
+  <script>
+    const cases = {
+      default_pursuit: {
+        label: "추적",
+        branch: "Lead / Lag Pursuit",
+        own: [0, 0, 1500],
+        ownYaw: 0,
+        target: [3200, 300, 1700],
+        targetYaw: 0,
+      },
+      low_altitude_recover: {
+        label: "저고도",
+        branch: "Climb Recover",
+        own: [0, 0, 500],
+        ownYaw: 0,
+        target: [3200, 300, 900],
+        targetYaw: 0,
+      },
+      defensive_close: {
+        label: "방어",
+        branch: "Defensive Break",
+        own: [0, 0, 1500],
+        ownYaw: 0,
+        target: [1000, 0, 1500],
+        targetYaw: 180,
+      },
+    };
+
+    const canvas = document.getElementById("view");
+    const ctx = canvas.getContext("2d");
+    const ids = ["branch", "caseName", "step", "distance", "altitude", "throttle", "pitch", "vpText"];
+    const ui = Object.fromEntries(ids.map((id) => [id, document.getElementById(id)]));
+    const scrub = document.getElementById("scrub");
+    const play = document.getElementById("play");
+    let current = "default_pursuit";
+    let frames = [];
+    let idx = 0;
+    let playing = false;
+    let lastTime = 0;
+
+    function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
+    function wrapDeg(a) { return ((a + 180) % 360 + 360) % 360 - 180; }
+    function distance(a, b) {
+      return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    }
+    function leadVP(target, targetYaw, ownAlt) {
+      const lead = 960;
+      return [
+        target[0] + Math.cos(targetYaw * Math.PI / 180) * lead,
+        target[1] + Math.sin(targetYaw * Math.PI / 180) * lead,
+        target[2] + clamp(ownAlt < target[2] ? 80 : -120, -120, 100),
+      ];
+    }
+    function recoverVP(own) {
+      return [own[0] + 4500, own[1], 1500];
+    }
+    function defensiveVP(own, target) {
+      const away = Math.atan2(own[1] - target[1], own[0] - target[0]);
+      const side = away - Math.PI / 2;
+      return [
+        own[0] + Math.cos(side) * 5000,
+        own[1] + Math.sin(side) * 5000,
+        own[2] + 1600,
+      ];
+    }
+    function commandFor(own, ownYaw, vp) {
+      const dx = vp[0] - own[0];
+      const dy = vp[1] - own[1];
+      const dz = vp[2] - own[2];
+      const desired = Math.atan2(dy, dx) * 180 / Math.PI;
+      const yawErr = wrapDeg(desired - ownYaw);
+      const pitch = clamp(-dz / 900, -1, 1);
+      return {
+        roll: clamp(yawErr / 45, -1, 1),
+        rudder: clamp(-yawErr / 35, -1, 1),
+        pitch,
+        throttle: 1,
+      };
+    }
+    function simulate(name) {
+      const c = cases[name];
+      let own = c.own.slice();
+      let target = c.target.slice();
+      let ownYaw = c.ownYaw;
+      let targetYaw = c.targetYaw;
+      const out = [];
+      const dt = 0.2;
+      for (let i = 0; i < 80; i++) {
+        const d = distance(own, target);
+        let branch = c.branch;
+        let vp;
+        if (own[2] < 850) {
+          branch = "Climb Recover";
+          vp = recoverVP(own);
+        } else if (d < 1800 && Math.abs(wrapDeg(targetYaw - Math.atan2(own[1] - target[1], own[0] - target[0]) * 180 / Math.PI)) < 50) {
+          branch = "Defensive Break";
+          vp = defensiveVP(own, target);
+        } else {
+          vp = leadVP(target, targetYaw, own[2]);
+        }
+        const cmd = commandFor(own, ownYaw, vp);
+        out.push({ own: own.slice(), target: target.slice(), vp, dist: d, branch, cmd });
+
+        target[0] += Math.cos(targetYaw * Math.PI / 180) * 240 * dt;
+        target[1] += Math.sin(targetYaw * Math.PI / 180) * 240 * dt;
+        const vx = vp[0] - own[0];
+        const vy = vp[1] - own[1];
+        const vz = vp[2] - own[2];
+        const desiredYaw = Math.atan2(vy, vx) * 180 / Math.PI;
+        ownYaw += clamp(wrapDeg(desiredYaw - ownYaw), -28 * dt, 28 * dt);
+        const total = Math.max(1, Math.hypot(vx, vy, vz));
+        own[2] = Math.max(80, own[2] + clamp(vz / total * 250, -90, 90) * dt);
+        own[0] += Math.cos(ownYaw * Math.PI / 180) * 250 * dt;
+        own[1] += Math.sin(ownYaw * Math.PI / 180) * 250 * dt;
+      }
+      return out;
+    }
+    function resize() {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+      canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      draw();
+    }
+    function bounds() {
+      const pts = [];
+      frames.forEach((f) => pts.push(f.own, f.target, f.vp));
+      const xs = pts.map((p) => p[0]);
+      const ys = pts.map((p) => p[1]);
+      return {
+        minX: Math.min(...xs) - 800,
+        maxX: Math.max(...xs) + 800,
+        minY: Math.min(...ys) - 800,
+        maxY: Math.max(...ys) + 800,
+      };
+    }
+    function project(p, b) {
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      const sx = w / (b.maxX - b.minX);
+      const sy = h / (b.maxY - b.minY);
+      const s = Math.min(sx, sy) * 0.9;
+      const ox = (w - (b.maxX - b.minX) * s) / 2;
+      const oy = (h - (b.maxY - b.minY) * s) / 2;
+      return [ox + (p[0] - b.minX) * s, h - (oy + (p[1] - b.minY) * s)];
+    }
+    function path(points, color, b, upto) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let i = 0; i <= upto; i++) {
+        const p = project(points[i], b);
+        if (i === 0) ctx.moveTo(p[0], p[1]);
+        else ctx.lineTo(p[0], p[1]);
+      }
+      ctx.stroke();
+    }
+    function dot(p, color, r, b) {
+      const q = project(p, b);
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(q[0], q[1], r, 0, Math.PI * 2);
+      ctx.fill();
+      return q;
+    }
+    function draw() {
+      if (!frames.length) return;
+      ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+      const b = bounds();
+      const f = frames[idx];
+      path(frames.map((x) => x.own), "#4dd4ff", b, idx);
+      path(frames.map((x) => x.target), "#ff6b5f", b, idx);
+      const own = dot(f.own, "#4dd4ff", 7, b);
+      const tgt = dot(f.target, "#ff6b5f", 7, b);
+      const vp = dot(f.vp, "#ffe066", 6, b);
+      ctx.strokeStyle = "rgba(255,224,102,.55)";
+      ctx.setLineDash([8, 8]);
+      ctx.beginPath();
+      ctx.moveTo(own[0], own[1]);
+      ctx.lineTo(vp[0], vp[1]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.strokeStyle = "rgba(255,107,95,.35)";
+      ctx.beginPath();
+      ctx.arc(tgt[0], tgt[1], Math.min(90, Math.max(22, f.dist / 70)), 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = "#eef2f7";
+      ctx.font = "13px Segoe UI, sans-serif";
+      ctx.fillText("OWN", own[0] + 10, own[1] - 10);
+      ctx.fillText("TARGET", tgt[0] + 10, tgt[1] - 10);
+      ctx.fillText("VP", vp[0] + 10, vp[1] - 10);
+    }
+    function updateUI() {
+      const f = frames[idx];
+      ui.branch.textContent = f.branch;
+      ui.caseName.textContent = cases[current].label;
+      ui.step.textContent = `${idx}/79`;
+      ui.distance.textContent = `${Math.round(f.dist)}m`;
+      ui.altitude.textContent = `${Math.round(f.own[2])}m`;
+      ui.throttle.textContent = f.cmd.throttle.toFixed(2);
+      ui.pitch.textContent = f.cmd.pitch.toFixed(2);
+      ui.vpText.textContent = `${Math.round(f.vp[0])}, ${Math.round(f.vp[1])}, ${Math.round(f.vp[2])}`;
+      scrub.value = String(idx);
+      draw();
+    }
+    function selectCase(name) {
+      current = name;
+      frames = simulate(name);
+      idx = 0;
+      document.querySelectorAll(".controls button").forEach((b) => b.classList.toggle("active", b.id === name));
+      updateUI();
+    }
+    function tick(t) {
+      if (playing && t - lastTime > 90) {
+        idx = (idx + 1) % frames.length;
+        lastTime = t;
+        updateUI();
+      }
+      requestAnimationFrame(tick);
+    }
+    document.querySelectorAll(".controls button").forEach((b) => b.addEventListener("click", () => selectCase(b.id)));
+    play.addEventListener("click", () => {
+      playing = !playing;
+      play.textContent = playing ? "Ⅱ" : "▶";
+    });
+    scrub.addEventListener("input", () => {
+      idx = Number(scrub.value);
+      updateUI();
+    });
+    window.addEventListener("resize", resize);
+    selectCase(current);
+    resize();
+    requestAnimationFrame(tick);
+  </script>
+</body>
+</html>

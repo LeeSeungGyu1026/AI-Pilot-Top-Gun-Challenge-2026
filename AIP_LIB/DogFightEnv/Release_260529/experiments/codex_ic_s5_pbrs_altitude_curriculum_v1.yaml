@@ -1,0 +1,128 @@
+# Codex S5 PBRS altitude curriculum: repair broad H5 ownship-altitude failures.
+#
+# H7a showed failures are broad but structured: all BT indices had some
+# ownship-altitude losses, loiter indices 5-7 were severe, loiter 0-4 were
+# clean, and FDM failures were zero. This branch uses moderate potential-based
+# altitude shaping and controlled exposure rather than the harsh H6 terminal
+# penalty wrapper.
+#
+# Run:
+#   python scripts/run_experiment.py experiments/codex_ic_s5_pbrs_altitude_curriculum_v1.yaml
+
+name: codex_ic_s5_pbrs_altitude_curriculum
+script: train_rllib
+
+output:
+  name: team01
+  tag: codex_ic_s5_pbrs_altitude_curriculum_v1
+
+env:
+  observation_mode: custom
+  observation_module: student.my_observation
+  reward_module: student.my_reward
+  target_mode: behavior_tree
+  target_behavior_dll: AIP_BASE_target.dll
+  max_engage_time: 120.0
+  episode_step_limit: 7200
+
+env_config:
+  step_ratio: 6
+  observation_size: 26
+  action_slew_limit: 0.25
+  initial_scenario:
+    mode: ref_old_random
+    legacy_use_random_scenario: true
+    legacy_use_first_scenario_only: false
+    # H7a-weighted exposure:
+    # - BT idx1/idx2 were weakest among BT.
+    # - Loiter idx5/idx6/idx7 were severe.
+    # - Loiter idx0-idx4 remain as a small clean anchor dose.
+    legacy_scenario_indices: [1, 2, 1, 2, 6, 7, 6, 7, 5, 5, 0, 3, 4, 0, 1, 2, 3, 4, 5, 6, 7]
+    legacy_randomization:
+      aircraft_radius_m: 75.0
+      roll_deg: 3.0
+      pitch_deg: 3.0
+      heading_deg: 3.0
+      shared_n_m: 2500.0
+      shared_e_m: 2500.0
+      shared_d_m: 2500.0
+      target_distance_n_m: 250.0
+      speed_mps: 35.0
+      loiter_bank_deg_range: [35.0, 55.0]
+  target_loiter:
+    enabled: true
+    bank: 45.0
+    pitch: 0.0
+  target_autopilot:
+    heading_cmd: 0.0
+    altitude_cmd: -7000.0
+    speed_cmd: 250.0
+  wez:
+    angle_deg: 8.0
+    min_range_m: 152.4
+    max_range_m: 914.4
+  reward:
+    win_reward: 150.0
+    loss_reward: -150.0
+    draw_reward: -150.0
+    damage_dealt_scale: 30.0
+    damage_taken_scale: 12.0
+    wez_entry_bonus: 20.0
+    pbrs_gamma: 1.0
+    pbrs_ata_weight: 2.0
+    pbrs_range_weight: 1.0
+    pbrs_range_log_clip: 3.0
+    pbrs_alt_weight: 18.0
+    safety_floor_m: 650.0
+    safety_safe_m: 1800.0
+    pursuit_dense_scale: 0.06
+    pursuit_half_angle_deg: 45.0
+    pursuit_range_m: 3500.0
+    step_penalty: -0.005
+    survival_bonus: 0.0
+    damage_scale: 0.0
+    low_altitude_penalty: 0.0
+
+algo:
+  name: ppo
+  framework: torch
+  lr: 3.0e-5
+  gamma: 0.997
+  gae_lambda: 0.95
+  clip_param: 0.04
+  train_batch_size: 16384
+  minibatch_size: 512
+  mlp:
+    enabled: true
+    fcnet_hiddens: [256, 256]
+    fcnet_activation: tanh
+    head_fcnet_hiddens: []
+    head_fcnet_activation: tanh
+    vf_share_layers: false
+
+runtime:
+  iterations: 12
+  num_env_runners: 4
+  num_envs_per_env_runner: 1
+  rollout_fragment_length: auto
+  batch_mode: truncate_episodes
+  save_lightweight_bundle: true
+  lightweight_bundle_frequency: 4
+  save_native_checkpoint: false
+  init_bundle: artifacts/models/team01/codex_freeze_ic_s4_mixed_anchor_guard_v1_20260620_0853
+
+dashboard:
+  enabled: true
+  logdir: artifacts/dashboard
+
+policy_probe:
+  enabled: false
+
+engagement_log:
+  enabled: true
+  interval: 4
+  steps: 1200
+  episodes: 1
+  print: false
+
+notes: "codex H7b: PBRS altitude curriculum from frozen H5 using H7a failing BT and hard-loiter slices; no harsh altitude terminal wrapper."

@@ -1,0 +1,143 @@
+# IC curriculum S3 v2 — same opponent swap as ic_s3_bt.yaml (gentle weave -> BT),
+# but with the reward fix ic_s3_bt_v1 called for.
+#
+# v1 result (seeded from sep1450_v1, same env_config as this file): 0% win vs BT,
+# ~87% loss, ALL "ownship altitude below min" — the agent pure-pursuit-chases the
+# BT's defensive dive straight into the ground at full health on both sides. The
+# PBRS altitude potential nets to ~0 over an episode by design, so it discourages
+# sinking but never makes "keep chasing into the ground" strictly worse than
+# breaking off in time.
+#
+# v2 changes ONLY student/my_reward.py (env_config below is byte-identical to
+# ic_s3_bt.yaml, and this seeds from the SAME base ic_s2_sep1450_v1, not from the
+# crashed ic_s3_bt_v1) so this is a clean single-variable comparison against v1:
+#   1) aspect-cone shaping (folded into "pursuit"): penalty when the BT's nose
+#      cone is on us (BT threatening), reward when we sit in the BT's six.
+#   2) altitude-floor bumper (folded into "safety"): a REAL per-step penalty
+#      (not potential-based) that switches on within critical_alt_margin_m of
+#      the floor and grows sharply (quadratic) toward it, so continuing to chase
+#      a diving target into the ground is no longer a free action.
+# Watch: crash_rate / "ownship altitude below min" share should drop vs v1;
+# ep_min_distance / win_rate (corrected classify, forced-ground counts as win)
+# should hold or improve, not regress, since the new terms are small relative to
+# the existing pursuit/damage/terminal signal.
+#
+#   python scripts\run_experiment.py experiments\ic_s3_bt_v2.yaml
+
+name: ic_s3_bt_v2
+script: train_rllib
+
+output:
+  name: team01
+  tag: ic_s3_bt_v2
+
+env:
+  observation_mode: custom
+  observation_module: student.my_observation
+  reward_module: student.my_reward
+  target_mode: behavior_tree        # the real competition adversary (maneuvers/evades in 3D)
+  target_behavior_dll: AIP_BASE_target.dll
+  max_engage_time: 90.0
+  episode_step_limit: 5400
+
+env_config:
+  step_ratio: 6
+  observation_size: 26
+  action_slew_limit: 0.25
+  offensive_saddle:
+    enabled: true
+    range_m: [1100.0, 1450.0]       # competition range; agent starts locked-on behind the BT
+    aspect_deg: [0.0, 30.0]
+    altitude_m: 7000.0
+    target_speed_mps: 250.0
+    own_speed_mps: 300.0
+  range_discipline:                 # keep the proven exploit-blocker / aggression pressure
+    enabled: true
+    max_range_m: 2500.0
+    grow_steps: 30
+  target_weave:
+    enabled: false                  # inert vs BT anyway (only fires when target_mode==autopilot)
+    amplitude_deg: 20.0
+    period_steps: 120.0
+  target_autopilot:                 # inert under behavior_tree; kept for config completeness
+    heading_cmd: 0.0
+    altitude_cmd: -7000.0
+    speed_cmd: 250.0
+  wez:
+    angle_deg: 8.0                  # keep WIDE shaping cone (narrowing collapsed the policy before)
+    min_range_m: 152.4
+    max_range_m: 914.4
+  reward:
+    win_reward: 150.0
+    loss_reward: -150.0
+    draw_reward: -150.0
+    damage_dealt_scale: 30.0
+    damage_taken_scale: 12.0
+    wez_entry_bonus: 20.0
+    pbrs_gamma: 0.997
+    pbrs_ata_weight: 2.0
+    pbrs_range_weight: 1.0
+    pbrs_range_log_clip: 3.0
+    pbrs_alt_weight: 10.0
+    safety_floor_m: 300.0
+    safety_safe_m: 900.0
+    pursuit_dense_scale: 0.1
+    pursuit_half_angle_deg: 45.0
+    pursuit_range_m: 4000.0
+    step_penalty: -0.005
+    survival_bonus: 0.0
+    damage_scale: 0.0
+    low_altitude_penalty: 0.0
+    # --- new in v2 ---
+    aspect_cone_deg: 30.0
+    front_cone_penalty_scale: 0.3
+    rear_cone_reward_scale: 0.3
+    critical_alt_margin_m: 100.0
+    altitude_floor_penalty_scale: 25.0
+    altitude_floor_penalty_exponent: 2.0
+
+algo:
+  name: ppo
+  framework: torch
+  lr: 3.0e-4
+  gamma: 0.997
+  gae_lambda: 0.95
+  clip_param: 0.2
+  train_batch_size: 16384
+  minibatch_size: 512
+  mlp:
+    enabled: true
+    fcnet_hiddens: [256, 256]
+    fcnet_activation: tanh
+    head_fcnet_hiddens: []
+    head_fcnet_activation: tanh
+    vf_share_layers: false
+
+runtime:
+  iterations: 100
+  num_env_runners: 4
+  num_envs_per_env_runner: 1
+  rollout_fragment_length: auto
+  batch_mode: truncate_episodes
+  save_lightweight_bundle: true
+  lightweight_bundle_frequency: 10
+  save_native_checkpoint: false
+  # Seed from the SAME base as v1 (separation champion), NOT from the crashed
+  # ic_s3_bt_v1, so this is a clean single-variable (reward-only) comparison.
+  init_bundle: artifacts/models/team01/ic_s2_sep1450_v1
+
+dashboard:
+  enabled: true
+  logdir: artifacts/dashboard
+
+policy_probe:
+  enabled: false
+
+engagement_log:
+  enabled: true
+  interval: 10
+  steps: 900
+  episodes: 1
+  print: false
+
+notes: "IC S3 v2: same BT/competition-range setup as ic_s3_bt_v1, reward fix only (aspect-cone shaping + altitude-floor bumper) to stop the ground-chase crash."

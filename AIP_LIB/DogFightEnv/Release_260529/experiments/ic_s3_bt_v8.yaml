@@ -1,0 +1,160 @@
+# IC curriculum S3 v8 — break the "closing is net-negative" retreat loop.
+#
+# v7 (damage_dealt_scale 30->60 + pursuit_dense_scale 0.2) showed the most
+# engaged behavior of the whole line mid-run (iters ~15-40: ep_min_distance
+# down to 115-290m, ep_reward_damage repeatedly POSITIVE — real mutual
+# gunfire), then REGRESSED: by iters 175-194 it retreated back to 570-850m
+# standoff, wez=0.00, dmg slightly negative, timeout ~1.0. Diagnosis: at
+# close range the BT out-guns the RL (it holds its cone better), so with no
+# dense reward for the intermediate skill of holding OUR cone, the
+# risk-adjusted value of closing is negative — "get close, get shot, gain
+# nothing" — and PPO rationally settles back to standoff. Chicken-and-egg:
+# gunnery can only be learned close-in, but close-in is net-punishing before
+# gunnery exists.
+#
+# v8 package (four changes, one diagnosis — all student-side, BT untouched):
+#   1) reward.wez_step_bonus 0.5 (NEW, in student/my_reward.py): pays every
+#      step the full WEZ condition holds (range band + cone). Dense signal
+#      for SUSTAINING the gun solution. Not a loiter hack: in-WEZ time deals
+#      damage automatically under the platform's symmetric damage model.
+#   2) reward.damage_taken_scale 12 -> 6: halve the pain of getting hit
+#      during training so "stay in the fight while learning" survives PPO's
+#      risk accounting. (Competition scoring is unaffected — this is shaping.)
+#   3) max_engage_time 90 -> 180 s: the 3600-4200m spawn eats a large chunk
+#      of a 90s episode in closure; give the fight itself room (competition
+#      episodes are 300s, so this is MORE realistic, not less).
+#   4) wez.angle_deg 8 -> 16 (user-requested, doubled again): angle_deg IS the
+#      actual damage-model cone (src/dogfight/config.py's real default is
+#      2.0 -- 8 was already a deliberately wide training-shaping cone, per the
+#      project's own "narrow only in final stages" plan). Widening it further
+#      makes the cone-holding skill itself easier to stumble into and learn
+#      from while sustained tracking is still this weak; symmetric (helps the
+#      BT land hits too), but the BT's tracking is already reliable/rule-based
+#      -- the RL's cone-hold is the bottleneck, so this should net-help
+#      exploration more than it helps the BT. Narrow back toward 2 deg in a
+#      later stage once real kills start happening.
+#
+# Seed: v7's bundle_000030 (iter 30) — the most aggressive/engaged policy
+# observed in the whole line — NOT v7's final (which had already collapsed
+# back to standoff). Give the new incentives the right substrate.
+#
+#   python scripts\run_experiment.py experiments\ic_s3_bt_v8.yaml
+
+name: ic_s3_bt_v8
+script: train_rllib
+
+output:
+  name: team01
+  tag: ic_s3_bt_v8
+
+env:
+  observation_mode: custom
+  observation_module: student.my_observation
+  reward_module: student.my_reward
+  target_mode: behavior_tree        # the real competition adversary (maneuvers/evades in 3D)
+  target_behavior_dll: AIP_BASE_target.dll
+  max_engage_time: 180.0            # --- changed in v8: was 90.0 ---
+  episode_step_limit: 5400
+
+env_config:
+  step_ratio: 6
+  observation_size: 26
+  action_slew_limit: 0.25
+  offensive_saddle:
+    enabled: true
+    range_m: [3600.0, 4200.0]
+    aspect_deg: [0.0, 30.0]
+    altitude_m: 7000.0
+    target_speed_mps: 250.0
+    own_speed_mps: 300.0
+  range_discipline:
+    enabled: true
+    max_range_m: 7000.0
+    grow_steps: 30
+  target_weave:
+    enabled: false
+    amplitude_deg: 20.0
+    period_steps: 120.0
+  target_autopilot:
+    heading_cmd: 0.0
+    altitude_cmd: -7000.0
+    speed_cmd: 250.0
+  wez:
+    angle_deg: 16.0                   # --- changed in v8: was 8.0, doubled (user request) ---
+    min_range_m: 152.4
+    max_range_m: 914.4
+  reward:
+    win_reward: 150.0
+    forced_ground_reward: 50.0
+    loss_reward: -150.0
+    draw_reward: -150.0
+    damage_dealt_scale: 60.0          # kept from v7
+    damage_taken_scale: 6.0           # --- changed in v8: was 12.0, halved ---
+    wez_entry_bonus: 20.0
+    wez_step_bonus: 0.5               # --- NEW in v8 ---
+    pbrs_gamma: 0.997
+    pbrs_ata_weight: 2.0
+    pbrs_range_weight: 1.0
+    pbrs_range_log_clip: 3.0
+    pbrs_alt_weight: 10.0
+    safety_floor_m: 300.0
+    safety_safe_m: 900.0
+    pursuit_dense_scale: 0.2          # kept from v6/v7
+    pursuit_half_angle_deg: 45.0
+    pursuit_range_m: 4000.0
+    step_penalty: -0.005
+    survival_bonus: 0.0
+    damage_scale: 0.0
+    low_altitude_penalty: 0.0
+    aspect_cone_deg: 30.0
+    front_cone_penalty_scale: 0.3
+    rear_cone_reward_scale: 0.3
+    critical_alt_margin_m: 100.0
+    altitude_floor_penalty_scale: 25.0
+    altitude_floor_penalty_exponent: 2.0
+
+algo:
+  name: ppo
+  framework: torch
+  lr: 3.0e-4
+  gamma: 0.997
+  gae_lambda: 0.95
+  clip_param: 0.2
+  train_batch_size: 16384
+  minibatch_size: 512
+  mlp:
+    enabled: true
+    fcnet_hiddens: [256, 256]
+    fcnet_activation: tanh
+    head_fcnet_hiddens: []
+    head_fcnet_activation: tanh
+    vf_share_layers: false
+
+runtime:
+  iterations: 150
+  num_env_runners: 4
+  num_envs_per_env_runner: 1
+  rollout_fragment_length: auto
+  batch_mode: truncate_episodes
+  save_lightweight_bundle: true
+  lightweight_bundle_frequency: 10
+  save_native_checkpoint: false
+  # Seed from v7's iter-30 bundle: the most engaged policy observed (closing
+  # to 115-290m with positive damage exchange), before it regressed to standoff.
+  init_bundle: artifacts/models/team01/ic_s3_bt_v7/bundle_000030
+
+dashboard:
+  enabled: true
+  logdir: artifacts/dashboard
+
+policy_probe:
+  enabled: false
+
+engagement_log:
+  enabled: true
+  interval: 10
+  steps: 1800
+  episodes: 1
+  print: false
+
+notes: "IC S3 v8: break the close=get-shot=retreat loop v7 exposed. wez_step_bonus 0.5/step (NEW dense cone-holding signal), damage_taken_scale 12->6 (cheaper to stay in the fight while learning), max_engage_time 90->180s (room to fight after the long closure), wez.angle_deg 8->16 (wider cone, easier to learn to hold, symmetric but RL's cone-hold is the current bottleneck not the BT's). Seeded from v7 bundle_000030 (peak engagement), not v7 final (already collapsed to standoff)."

@@ -1,0 +1,116 @@
+# IC curriculum S3 — faster target + competition-distance spawn (advisor arc, step 3).
+#
+# S2 succeeded: from 600-1200 m the agent closes into the WEZ and forces the slow
+# target down (reward_mean ~150 => ~95% wins). S3 raises difficulty toward the real
+# fight: target speed 180 -> 220 (less of the agent's 300 m/s advantage, so it must
+# manage energy/geometry) and spawn out to 900-1500 m (the competition ~1400 m band),
+# wider aspect 0-45 deg. Target is STILL non-evading autopilot and the cone STILL 5 deg
+# — we add ONE difficulty axis at a time. Seeded from the S2 policy.
+#
+#   python scripts\run_experiment.py experiments\ic_s3_fast.yaml
+#
+# GATE to S4 (maneuvering target) when corrected run_eval win-rate vs this faster target
+# is ~0.7+. KEY signal: ep_min_distance still drops into the WEZ from the 900-1500 m start
+# despite the smaller speed advantage. Judge by run_eval win-rate + ep_reward_mean +
+# ep_reward_damage, NOT training-log win_rate (undercounts forced-ground kills).
+
+name: ic_s3_fast
+script: train_rllib
+
+output:
+  name: team01
+  tag: ic_s3_fast_v1
+
+env:
+  observation_mode: custom
+  observation_module: student.my_observation
+  reward_module: student.my_reward
+  target_mode: autopilot
+  target_behavior_dll: AIP_BASE_target.dll
+  max_engage_time: 120.0            # farther + faster target -> allow more time to close
+  episode_step_limit: 7200
+
+env_config:
+  step_ratio: 6
+  observation_size: 26              # custom-obs reload fix (saved into bundle); must equal OBSERVATION_SIZE
+  action_slew_limit: 0.25
+  offensive_saddle:
+    enabled: true
+    range_m: [900.0, 1500.0]        # competition-distance band
+    aspect_deg: [0.0, 45.0]
+    altitude_m: 7000.0
+    target_speed_mps: 220.0         # faster: agent (300) advantage shrinks 120 -> 80 m/s
+    own_speed_mps: 300.0
+  target_autopilot:
+    heading_cmd: 0.0
+    altitude_cmd: -7000.0           # NED Down-POSITIVE: -7000 = hold 7000 m (NOT +7000, which dives underground)
+    speed_cmd: 220.0
+  wez:
+    angle_deg: 5.0                  # still WIDE; narrow to 2 deg only in final stages
+    min_range_m: 152.4
+    max_range_m: 914.4
+  reward:
+    win_reward: 150.0
+    loss_reward: -150.0
+    draw_reward: -150.0
+    damage_dealt_scale: 30.0
+    damage_taken_scale: 12.0
+    wez_entry_bonus: 20.0
+    pbrs_gamma: 1.0
+    pbrs_ata_weight: 2.0
+    pbrs_range_weight: 1.0
+    pbrs_range_log_clip: 3.0
+    pbrs_alt_weight: 10.0
+    safety_floor_m: 300.0
+    safety_safe_m: 900.0
+    pursuit_dense_scale: 0.1
+    pursuit_half_angle_deg: 45.0
+    pursuit_range_m: 4000.0
+    step_penalty: -0.005
+    survival_bonus: 0.0
+    damage_scale: 0.0
+    low_altitude_penalty: 0.0
+
+algo:
+  name: ppo
+  framework: torch
+  lr: 3.0e-4
+  gamma: 0.997
+  gae_lambda: 0.95
+  clip_param: 0.2
+  train_batch_size: 16384
+  minibatch_size: 512
+  mlp:
+    enabled: true
+    fcnet_hiddens: [256, 256]
+    fcnet_activation: tanh
+    head_fcnet_hiddens: []
+    head_fcnet_activation: tanh
+    vf_share_layers: false
+
+runtime:
+  iterations: 50
+  num_env_runners: 4
+  num_envs_per_env_runner: 1
+  rollout_fragment_length: auto
+  batch_mode: truncate_episodes
+  save_lightweight_bundle: true
+  lightweight_bundle_frequency: 10
+  save_native_checkpoint: false
+  init_bundle: artifacts/models/team01/ic_s2_widen_v1   # seed from S2 (weight-only)
+
+dashboard:
+  enabled: true
+  logdir: artifacts/dashboard
+
+policy_probe:
+  enabled: false
+
+engagement_log:
+  enabled: true
+  interval: 10
+  steps: 1200
+  episodes: 1
+  print: false
+
+notes: "IC S3: faster target (220) + competition-distance spawn 900-1500m / 0-45deg aspect, autopilot non-evading, wide 5deg cone, seeded from S2."

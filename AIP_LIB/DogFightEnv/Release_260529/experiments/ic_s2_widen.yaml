@@ -1,0 +1,133 @@
+# IC curriculum S2 — WIDEN the saddle (advisor 2026-06-13 arc, step 2).
+#
+# The saddle (250-450 m) is solved: the agent tracks and kills from a gifted
+# position. S2 forces it to CLOSE and ACQUIRE from 600-1200 m at wider aspect,
+# seeded from the saddle policy. Target is still slow/level/non-evading and the
+# cone stays WIDE (5 deg) — we only train closure+tracking here, not the 2 deg
+# precision (that comes last). Bands are randomized per episode by the wrapper.
+#
+#   python scripts\run_experiment.py experiments\ic_s2_widen.yaml
+#
+# GATE to S3 when the corrected run_eval win-rate vs this autopilot target is
+# high (~0.7+). Judge progress by run_eval win-rate + ep_reward_mean + damage,
+# NOT the training-log win_rate (which undercounts forced-ground kills — see
+# WORKFLOW.md). KEY S2 signal: ep_min_distance must drop into the WEZ from the
+# wider 600-1200 m start (proof it learned to close, building on saddle tracking).
+
+name: ic_s2_widen
+script: train_rllib
+
+output:
+  name: team01
+  tag: ic_s2_sep1450_v1
+
+env:
+  observation_mode: custom
+  observation_module: student.my_observation
+  reward_module: student.my_reward
+  target_mode: autopilot
+  target_behavior_dll: AIP_BASE_target.dll
+  max_engage_time: 90.0             # a bit longer: closing from farther takes time
+  episode_step_limit: 5400
+
+env_config:
+  step_ratio: 6
+  observation_size: 26              # custom-obs reload fix (saved into bundle); must equal OBSERVATION_SIZE
+  action_slew_limit: 0.25
+  offensive_saddle:
+    enabled: true
+    range_m: [1100.0, 1450.0]       # sep1450_v1: MILESTONE rung — covers the ~1400m competition spawn.
+                                    # sep1350 (1000-1350) =0.93. weave on. After this: milestone weave-eval, then cone 8->2 / BT.
+    aspect_deg: [0.0, 30.0]
+    altitude_m: 7000.0
+    target_speed_mps: 250.0
+    own_speed_mps: 300.0
+  range_discipline:                 # advisor Step 1: kill the "extend to a 900-step draw" exploit.
+    enabled: true                   # replay: 90% timeouts are one-pass-then-fly-to-8-11km-and-never-return.
+    max_range_m: 2500.0             # REVERTED 3000->2500: weave_v3 relaxation REGRESSED (eval 75->30%).
+    grow_steps: 30                  # the tight 2.5km/30 cap is a useful TRAINING PRESSURE (drives aggressive
+                                    # finishing), not just an exploit-blocker. Do not relax it.
+  target_weave:                     # weave_v1 (advisor next rung): gently maneuvering opponent.
+    enabled: true                   # oscillate autopilot heading so it's no longer a straight-flyer.
+    amplitude_deg: 20.0             # +/-20deg lazy weave around base heading (north / heading_cmd 0).
+    period_steps: 120.0             # slow: ~120 policy steps per full cycle. Keep gentle; harden later.
+  target_autopilot:
+    heading_cmd: 0.0
+    altitude_cmd: -7000.0           # NED Down-POSITIVE: -7000 = hold 7000 m (NOT +7000, which dives underground)
+    speed_cmd: 250.0
+  wez:
+    angle_deg: 8.0                  # REVERTED 5->8: cone5_v1 COLLAPSED (win 0->0, ata diverged 98->150).
+                                    # Narrow shaping cone starves the tracking scaffold. Keep wide;
+                                    # finishing is fixed via the dense-pursuit term below, not cone width.
+    min_range_m: 152.4
+    max_range_m: 914.4
+  reward:
+    win_reward: 150.0
+    loss_reward: -150.0
+    draw_reward: -150.0
+    damage_dealt_scale: 30.0
+    damage_taken_scale: 12.0
+    wez_entry_bonus: 20.0
+    pbrs_gamma: 0.997               # MUST match algo.gamma (0.997) for PBRS policy-invariance (advisor).
+                                    # Was 1.0 (cosmetic, to keep logs clean) -> mildly non-invariant over 900 steps.
+    pbrs_ata_weight: 2.0
+    pbrs_range_weight: 1.0
+    pbrs_range_log_clip: 3.0
+    pbrs_alt_weight: 10.0
+    safety_floor_m: 300.0
+    safety_safe_m: 900.0
+    pursuit_dense_scale: 0.1        # RESTORED v6 baseline. finish_v1 (0.25) REGRESSED: win collapsed to 0,
+    pursuit_half_angle_deg: 45.0    # ata diverged 100->147. Sharpening the dense term destabilized training.
+                                    # Finishing wall (eval v6: 10% win/90% timeout) is NOT fixed by reward
+                                    # tweaks tried so far -> needs replay-level diagnosis before next change.
+    pursuit_range_m: 4000.0
+    step_penalty: -0.005
+    survival_bonus: 0.0
+    damage_scale: 0.0
+    low_altitude_penalty: 0.0
+
+algo:
+  name: ppo
+  framework: torch
+  lr: 3.0e-4
+  gamma: 0.997
+  gae_lambda: 0.95
+  clip_param: 0.2
+  train_batch_size: 16384
+  minibatch_size: 512
+  mlp:
+    enabled: true
+    fcnet_hiddens: [256, 256]
+    fcnet_activation: tanh
+    head_fcnet_hiddens: []
+    head_fcnet_activation: tanh
+    vf_share_layers: false
+
+runtime:
+  iterations: 100                 # longer single run -> amortize re-seed crash-recovery, master this stage
+  num_env_runners: 4
+  num_envs_per_env_runner: 1
+  rollout_fragment_length: auto
+  batch_mode: truncate_episodes
+  save_lightweight_bundle: true
+  lightweight_bundle_frequency: 10
+  save_native_checkpoint: false
+  # sep1450_v1: final separation rung 1000-1350 -> 1100-1450m, COVERS the ~1400m competition
+  # spawn. sep1350 =0.93 train win vs weave. Seed sep1350_v1. Milestone: weave-eval after this.
+  init_bundle: artifacts/models/team01/ic_s2_sep1350_v1
+
+dashboard:
+  enabled: true
+  logdir: artifacts/dashboard
+
+policy_probe:
+  enabled: false
+
+engagement_log:
+  enabled: true
+  interval: 10
+  steps: 900
+  episodes: 1
+  print: false
+
+notes: "IC S2: widen saddle to 600-1200m / 0-30deg aspect vs slow autopilot, wide 5deg cone, seeded from saddle."

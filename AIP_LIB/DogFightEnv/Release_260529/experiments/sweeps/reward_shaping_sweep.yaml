@@ -1,0 +1,26 @@
+# Week-1 diagnostic sweep: reward shaping variants (short runs, kill losers fast).
+#
+#   python scripts\run_parallel.py experiments\sweeps\reward_shaping_sweep.yaml --dry-run
+#   python scripts\run_parallel.py experiments\sweeps\reward_shaping_sweep.yaml
+#
+# What to compare on the dashboard (artifacts/dashboard, one curve per run):
+#   - ep_crash_rate        -> first boss; nothing matters until it is near zero
+#   - ep_min_distance      -> is the agent approaching at all?
+#   - ep_wez_steps         -> engagement occupancy trend
+#   - ep_reward_pbrs vs ep_reward_terminal  -> shaping must NOT dwarf outcome
+#   - ep_reward_damage_taken               -> evasion-collapse check
+
+name: reward_shaping
+base: experiments/team_ppo_mlp.yaml
+max_parallel: 2
+repeats: 1
+
+overrides:
+  runtime.iterations: 30          # diagnostic length (~ a few hours total)
+  runtime.native_checkpoint_frequency: 0
+  runtime.save_native_checkpoint: false
+  engagement_log.enabled: false   # keep diagnostics cheap
+
+grid:
+  env_config.reward.pbrs_ata_weight: [1.0, 2.0]
+  env_config.reward.damage_taken_scale: [12.0, 30.0]   # asymmetric vs symmetric

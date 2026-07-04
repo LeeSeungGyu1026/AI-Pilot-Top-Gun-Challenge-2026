@@ -1,0 +1,22 @@
+# Advisor's 48h plan: two curriculum runs differing ONLY in the dense-pursuit
+# cap (0.2 vs 0.1 per step). WEZ schedule + PBRS identical, everything locked.
+#
+#   python scripts\run_parallel.py experiments\sweeps\curriculum_dense_sweep.yaml --dry-run
+#   python scripts\run_parallel.py experiments\sweeps\curriculum_dense_sweep.yaml
+#
+# Success criteria for the week (from advisor):
+#   - nonzero ep_reward_damage and first wins vs loiter/fixed stages
+#   - entropy visibly declining as tracking emerges (sigma toward 0.2-0.4)
+#   - watch pursuit vs damage components: pursuit growing while damage flat
+#     in late stages = the dense term is being farmed
+#
+# NOTE: curriculum runs ignore env_config overrides (platform behavior), so
+# the variants differ via curriculum.stages_module, not env_config.reward.
+
+name: curr_dense
+base: experiments/team_curriculum.yaml
+max_parallel: 2
+repeats: 1
+
+grid:
+  curriculum.stages_module: [student.my_curriculum, student.my_curriculum_dense01]

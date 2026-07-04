@@ -1,0 +1,150 @@
+# IC curriculum S3 v10 — user redesign of both exploited shaping terms after
+# v9b's collapse (own-crash 76.5%, kills 0%, reward_mean spiking 600-970 from
+# cone-farming). Two coupled changes, both exponential-interpolation reshapes:
+#
+#   1) Precision bonus: wez_shaping_cone_deg 45 -> 90, and the payoff is no
+#      longer a fat linear floor+ramp (30 -> 60) but an EXPONENTIAL curve from
+#      wez_precision_bonus_min=1 at the cone edge to max=100 at dead-on:
+#      bonus = 1 * 100^(1 - |ata|/45). Verified: ata=0 -> 100, 5deg -> 59.9,
+#      10deg -> 35.9, 22.5deg -> 10, 45deg (edge) -> 1, outside -> 0.
+#      Sloppy aim is now nearly worthless; the payoff concentrates tightly
+#      around dead-on, which inside the range band IS the true 2deg kill cone
+#      dealing automatic damage -- the gradient funnels into kills, not
+#      cone-loitering.
+#   2) Altitude floor bumper: rebalanced from the max-25 polynomial (which the
+#      v9 bonus simply outbid) to an EXPONENTIAL band from 600m down to the
+#      300m floor: penalty = -1 * 1000^((600-alt)/300). Verified: 600m -> -1,
+#      450m -> -31.6, 350m -> -316, 300m -> -1000/step. No few-step shaping
+#      payoff can outbid this; "crash for the bonus" stops being rational.
+#      (critical_alt_margin_m 100 -> 300, new min/max keys replace the old
+#      scale/exponent keys in student/my_reward.py.)
+#
+# True kill criteria unchanged: wez.angle_deg stays at platform default 2.0.
+# Seed: v9b's last checkpoint bundle_000040 (per user: continue from the
+# current last checkpoint) -- yes, that policy is the degenerate crash-diver,
+# but the -1000 exponential wall gives it an immediate, dominant gradient to
+# unlearn the dive, and its aggressive-closing skill is worth keeping.
+# Reward-scale caution flagged: per-step rewards now span roughly -1000..+100,
+# so watch vf_loss / explained_var for value-function instability.
+#
+#   python scripts\run_experiment.py experiments\ic_s3_bt_v10.yaml
+
+name: ic_s3_bt_v10
+script: train_rllib
+
+output:
+  name: team01
+  tag: ic_s3_bt_v10
+
+env:
+  observation_mode: custom
+  observation_module: student.my_observation
+  reward_module: student.my_reward
+  target_mode: behavior_tree        # the real competition adversary (maneuvers/evades in 3D)
+  target_behavior_dll: AIP_BASE_target.dll
+  max_engage_time: 180.0
+  episode_step_limit: 5400
+
+env_config:
+  step_ratio: 6
+  observation_size: 26
+  action_slew_limit: 0.25
+  offensive_saddle:
+    enabled: true
+    range_m: [3600.0, 4200.0]
+    aspect_deg: [0.0, 30.0]
+    altitude_m: 7000.0
+    target_speed_mps: 250.0
+    own_speed_mps: 300.0
+  range_discipline:
+    enabled: true
+    max_range_m: 7000.0
+    grow_steps: 30
+  target_weave:
+    enabled: false
+    amplitude_deg: 20.0
+    period_steps: 120.0
+  target_autopilot:
+    heading_cmd: 0.0
+    altitude_cmd: -7000.0
+    speed_cmd: 250.0
+  wez:
+    angle_deg: 2.0                    # true kill cone, platform default, unchanged
+    min_range_m: 152.4
+    max_range_m: 914.4
+  reward:
+    win_reward: 150.0
+    forced_ground_reward: 50.0
+    loss_reward: -150.0
+    draw_reward: -150.0
+    damage_dealt_scale: 60.0
+    damage_taken_scale: 6.0
+    wez_entry_bonus: 20.0
+    wez_shaping_cone_deg: 90.0        # --- v10: was 45 ---
+    wez_precision_bonus_min: 1.0      # --- v10: was 30 (edge value) ---
+    wez_precision_bonus_max: 100.0    # --- v10: was 60 (dead-on value); interp now exponential ---
+    pbrs_gamma: 0.997
+    pbrs_ata_weight: 2.0
+    pbrs_range_weight: 1.0
+    pbrs_range_log_clip: 3.0
+    pbrs_alt_weight: 10.0
+    safety_floor_m: 300.0
+    safety_safe_m: 900.0
+    pursuit_dense_scale: 0.2
+    pursuit_half_angle_deg: 45.0
+    pursuit_range_m: 4000.0
+    step_penalty: -0.005
+    survival_bonus: 0.0
+    damage_scale: 0.0
+    low_altitude_penalty: 0.0
+    aspect_cone_deg: 30.0
+    front_cone_penalty_scale: 0.3
+    rear_cone_reward_scale: 0.3
+    critical_alt_margin_m: 300.0      # --- v10: was 100; band now starts at 600m ---
+    altitude_floor_penalty_min: 1.0   # --- v10: value at the 600m band edge ---
+    altitude_floor_penalty_max: 1000.0 # --- v10: value at/below the 300m floor; interp exponential ---
+
+algo:
+  name: ppo
+  framework: torch
+  lr: 3.0e-4
+  gamma: 0.997
+  gae_lambda: 0.95
+  clip_param: 0.2
+  train_batch_size: 16384
+  minibatch_size: 512
+  mlp:
+    enabled: true
+    fcnet_hiddens: [256, 256]
+    fcnet_activation: tanh
+    head_fcnet_hiddens: []
+    head_fcnet_activation: tanh
+    vf_share_layers: false
+
+runtime:
+  iterations: 150
+  num_env_runners: 4
+  num_envs_per_env_runner: 1
+  rollout_fragment_length: auto
+  batch_mode: truncate_episodes
+  save_lightweight_bundle: true
+  lightweight_bundle_frequency: 10
+  save_native_checkpoint: false
+  # Continue from v9b's last checkpoint per user instruction.
+  init_bundle: artifacts/models/team01/ic_s3_bt_v9b/bundle_000040
+
+dashboard:
+  enabled: true
+  logdir: artifacts/dashboard
+
+policy_probe:
+  enabled: false
+
+engagement_log:
+  enabled: true
+  interval: 10
+  steps: 1800
+  episodes: 1
+  print: false
+
+notes: "IC S3 v10: user redesign after v9b collapse -- precision bonus reshaped to 90deg cone with EXPONENTIAL 1(edge)->100(dead-on) so sloppy aim is worthless, and altitude bumper reshaped to EXPONENTIAL -1@600m -> -1000@300m so no shaping payoff can make crashing rational. True kill cone (wez.angle_deg=2.0) unchanged. Seeded from v9b bundle_000040 (last checkpoint, per user)."

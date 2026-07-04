@@ -1,0 +1,114 @@
+# Codex SAC mixed smoke: test SAC as an alternative to PPO after PPO loiter
+# stabilization collapsed. This is a smoke branch, not an incumbent.
+#
+# It intentionally trains from scratch because the source incumbent is PPO and
+# SAC weight compatibility is not guaranteed. Use the repo's mixed initial
+# scenario pattern so SAC sees both BT and loiter target modes early.
+#
+# Run:
+#   python scripts/run_experiment.py experiments/codex_sac_mixed_smoke_v1.yaml
+
+name: codex_sac_mixed_smoke
+script: train_rllib
+
+output:
+  name: team01
+  tag: codex_sac_mixed_smoke_v1
+
+env:
+  observation_mode: custom
+  observation_module: student.my_observation
+  reward_module: student.my_reward
+  target_mode: behavior_tree
+  target_behavior_dll: AIP_BASE_target.dll
+  max_engage_time: 180.0
+  episode_step_limit: 10800
+
+env_config:
+  step_ratio: 6
+  observation_size: 26
+  action_slew_limit: 0.25
+  initial_scenario:
+    mode: ref_old_random
+    legacy_use_random_scenario: true
+    legacy_use_first_scenario_only: false
+    legacy_scenario_indices: [0, 1, 2, 3, 4, 5, 6, 7]
+    legacy_randomization:
+      aircraft_radius_m: 100.0
+      roll_deg: 5.0
+      pitch_deg: 5.0
+      heading_deg: 5.0
+      shared_n_m: 4000.0
+      shared_e_m: 4000.0
+      shared_d_m: 4000.0
+      target_distance_n_m: 300.0
+      speed_mps: 50.0
+      loiter_bank_deg_range: [40.0, 70.0]
+  wez:
+    angle_deg: 8.0
+    min_range_m: 152.4
+    max_range_m: 914.4
+  reward:
+    win_reward: 150.0
+    loss_reward: -150.0
+    draw_reward: -150.0
+    damage_dealt_scale: 30.0
+    damage_taken_scale: 12.0
+    wez_entry_bonus: 20.0
+    pbrs_gamma: 0.997
+    pbrs_ata_weight: 2.0
+    pbrs_range_weight: 1.0
+    pbrs_range_log_clip: 3.0
+    pbrs_alt_weight: 10.0
+    safety_floor_m: 300.0
+    safety_safe_m: 900.0
+    pursuit_dense_scale: 0.1
+    pursuit_half_angle_deg: 45.0
+    pursuit_range_m: 4000.0
+    step_penalty: -0.005
+    survival_bonus: 0.0
+    damage_scale: 0.0
+    low_altitude_penalty: 0.0
+
+algo:
+  name: sac
+  framework: torch
+  lr: 3.0e-4
+  gamma: 0.997
+  train_batch_size: 512
+  minibatch_size: 512
+  tau: 0.005
+  target_entropy: auto
+  replay_buffer_capacity: 50000
+  mlp:
+    enabled: true
+    fcnet_hiddens: [256, 256]
+    fcnet_activation: relu
+    head_fcnet_hiddens: []
+    head_fcnet_activation: relu
+
+runtime:
+  iterations: 40
+  num_env_runners: 2
+  num_envs_per_env_runner: 1
+  rollout_fragment_length: auto
+  batch_mode: truncate_episodes
+  save_lightweight_bundle: true
+  lightweight_bundle_frequency: 10
+  save_native_checkpoint: false
+
+dashboard:
+  enabled: true
+  logdir: artifacts/dashboard
+
+policy_probe:
+  enabled: false
+
+engagement_log:
+  enabled: true
+  interval: 10
+  steps: 900
+  episodes: 1
+  print: false
+
+notes: "codex SAC smoke: mixed BT/loiter initial scenario with custom obs/reward, trained from scratch after PPO loiter-guard collapse."

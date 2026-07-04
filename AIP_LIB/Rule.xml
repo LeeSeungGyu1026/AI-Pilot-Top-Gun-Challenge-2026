@@ -1,0 +1,72 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence>
+      <SelectTarget name="SelectTarget" BB="{BB}"/>
+      <DirectionVectorUpdate name="DirectionVectorUpdate" BB="{BB}"/>
+      <DistanceUpdate name="DistanceUpdate" BB="{BB}"/>
+      <CheckSight name="CheckSight" BB="{BB}"/>
+      <AngleOffUpdate name="AngleOffUpdate" BB="{BB}"/>
+      <AspectAngleUpdate name="AspectAngleUpdate" BB="{BB}"/>
+
+      <Fallback>
+        <Sequence>
+          <DECO_AltitudeCheck name="LowAltitudeCheck" UpDown="Less" Altitude="900" BB="{BB}"/>
+          <Task_ClimbRecover name="ClimbRecover" MinAltitude="1500" ForwardDistance="4500" BB="{BB}"/>
+        </Sequence>
+
+        <Sequence>
+          <DECO_DistanceCheck name="HardRearBreakRangeCheck" UpDown="Less" Distance="2800" BB="{BB}"/>
+          <DECO_TargetLOSCheck name="HardRearTrackingCheck" UpDown="Less" InputLOS="55" BB="{BB}"/>
+          <Task_DefensiveBreak name="HardRearBreakTurn" BreakDistance="7200" VerticalOffset="0" BB="{BB}"/>
+        </Sequence>
+
+        <Sequence>
+          <DECO_DistanceCheck name="RearThreatRangeCheck" UpDown="Less" Distance="3200" BB="{BB}"/>
+          <DECO_LOSCheck name="TargetBehindCheck" UpDown="Greater" InputLOS="125" BB="{BB}"/>
+          <DECO_TargetLOSCheck name="TargetTrackingCheck" UpDown="Less" InputLOS="12" BB="{BB}"/>
+          <DECO_DistanceCheck name="GunsDefenseRangeCheck" UpDown="Less" Distance="1450" BB="{BB}"/>
+          <Task_RearThreatJink name="RearThreatJink" LateralDistance="4800" ForwardDistance="700" VerticalOffset="650" BB="{BB}"/>
+        </Sequence>
+
+        <Sequence>
+          <DECO_DistanceCheck name="BreakRangeCheck" UpDown="Less" Distance="2300" BB="{BB}"/>
+          <DECO_LOSCheck name="RearQuarterCheck" UpDown="Greater" InputLOS="95" BB="{BB}"/>
+          <DECO_TargetLOSCheck name="TargetLeadThreatCheck" UpDown="Less" InputLOS="35" BB="{BB}"/>
+          <Task_DefensiveBreak name="BreakTurn" BreakDistance="4700" VerticalOffset="350" BB="{BB}"/>
+        </Sequence>
+
+        <Sequence>
+          <DECO_DistanceCheck name="OvershootRangeCheck" UpDown="Less" Distance="750" BB="{BB}"/>
+          <DECO_LOSCheck name="LostNoseCheck" UpDown="Greater" InputLOS="55" BB="{BB}"/>
+          <Task_Recommit name="CloseRecommit" LeadDistance="1300" VerticalOffset="120" BB="{BB}"/>
+        </Sequence>
+
+        <Sequence>
+          <DECO_DistanceCheck name="LowYoYoBandCheck" UpDown="Less" Distance="2600" BB="{BB}"/>
+          <DECO_DistanceCheck name="LowYoYoMinRangeCheck" UpDown="Greater" Distance="950" BB="{BB}"/>
+          <DECO_LOSCheck name="CircleBreakLOSCheck" UpDown="Greater" InputLOS="35" BB="{BB}"/>
+          <DECO_LOSCheck name="LowYoYoRearExcludeCheck" UpDown="Less" InputLOS="130" BB="{BB}"/>
+          <Task_LowYoYo name="LowYoYo" DiveOffset="700" PullLeadDistance="1100" MinAltitude="1300" BB="{BB}"/>
+        </Sequence>
+
+        <Sequence>
+          <DECO_DistanceCheck name="FarRecommitCheck" UpDown="Greater" Distance="2500" BB="{BB}"/>
+          <Task_Recommit name="FarRecommit" LeadDistance="1700" VerticalOffset="150" BB="{BB}"/>
+        </Sequence>
+
+        <Sequence>
+          <DECO_LOSCheck name="NoseOnTargetCheck" UpDown="Less" InputLOS="30" BB="{BB}"/>
+          <DECO_DistanceCheck name="InsideWeaponsRangeCheck" UpDown="Less" Distance="950" BB="{BB}"/>
+          <Task_LeadPursuit name="GunLeadPursuit" MaxLeadDistance="1100" VerticalOffset="40" BB="{BB}"/>
+        </Sequence>
+
+        <Sequence>
+          <DECO_DistanceCheck name="MidFightCheck" UpDown="Less" Distance="2500" BB="{BB}"/>
+          <Task_LagPursuit name="LagPursuit" LagDistance="650" VerticalOffset="80" BB="{BB}"/>
+        </Sequence>
+
+        <Task_LagPursuit name="LagPursuitDefault" LagDistance="500" VerticalOffset="80" BB="{BB}"/>
+      </Fallback>
+    </Sequence>
+  </BehaviorTree>
+</root>

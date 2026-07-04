@@ -1,0 +1,124 @@
+# SADDLE TEST (advisor 2026-06-13): bootstrap + Q4 diagnostic in one short run.
+#
+# Spawn the agent ~300 m behind a SLOW, LEVEL, NON-EVADING target (autopilot),
+# pointed at it -> sustained gun-range start. First contact is GEOMETRICALLY
+# guaranteed (the from-1.4km spawn never reached the 914 m WEZ in 100 iters).
+#
+#   python scripts\run_experiment.py experiments\saddle_test.yaml
+#
+# READ THE VERDICT (only needs ~15-20 iters, minutes):
+#   * wez_steps / damage / win_rate climb fast  -> tracking + authority FINE,
+#     exploration was the whole wall. Proceed to the IC curriculum
+#     (saddle -> widen separation -> add aspect -> raise target speed ->
+#      add maneuver -> neutral merge -> competition IC vs BT).
+#   * spawns IN the saddle but still can't hold the 5 deg cone (oscillates,
+#     drifts out, wez_steps stay ~0) -> a CONTROL-TIMESCALE problem (tracking
+#     bandwidth), isolated before building a curriculum. Fix order: keep cone
+#     WIDE (5->8 deg) longer; only then touch action_slew_limit / action-repeat.
+
+name: saddle_test
+script: train_rllib
+
+output:
+  name: team01
+  tag: saddle_level_v6
+
+env:
+  observation_mode: custom
+  observation_module: student.my_observation
+  reward_module: student.my_reward
+  target_mode: autopilot            # slow, level, constant-velocity, non-evading
+  target_behavior_dll: AIP_BASE_target.dll
+  max_engage_time: 60.0             # v6: back to v4's best config (120s hurt); just train longer
+  episode_step_limit: 3600
+
+env_config:
+  step_ratio: 6
+  # REQUIRED for custom obs: the platform's RLLibInferenceEnv can't derive a
+  # custom mode's size (observation_size("tgc26")->12), so inference/eval/Unreal
+  # rebuild a wrong-size policy and weight-loading fails. Carried in env_config
+  # it is SAVED into the bundle and read on every reload path. (The env: block
+  # does NOT propagate — only env_config does.) Must equal OBSERVATION_SIZE.
+  observation_size: 26
+  action_slew_limit: 0.25
+  # NOTE: NO initial_scenario block -> reset() leaves spawn to the wrapper saddle.
+  offensive_saddle:
+    enabled: true
+    range_m: [250.0, 450.0]         # start INSIDE the 152-914 m WEZ
+    aspect_deg: [0.0, 12.0]         # ~6 deg average off the tail
+    altitude_m: 7000.0
+    target_speed_mps: 250.0   # v3: gap 120->50 to stop overshoot, sustain gun solution
+    own_speed_mps: 300.0
+  target_autopilot:
+    heading_cmd: 0.0                # hold north (matches spawn heading): straight, non-evading
+    altitude_cmd: -7000.0           # NED Down-POSITIVE: -7000 = hold 7000 m altitude (NOT +7000, which dives underground)
+    speed_cmd: 250.0
+  wez:
+    angle_deg: 8.0                  # v4: widen cone (tracking-bandwidth lever); obs in_wez stays true 2deg
+    min_range_m: 152.4
+    max_range_m: 914.4
+  reward:
+    win_reward: 150.0
+    loss_reward: -150.0
+    draw_reward: -150.0
+    damage_dealt_scale: 30.0
+    damage_taken_scale: 12.0
+    wez_entry_bonus: 20.0
+    pbrs_gamma: 1.0
+    pbrs_ata_weight: 2.0
+    pbrs_range_weight: 1.0
+    pbrs_range_log_clip: 3.0
+    pbrs_alt_weight: 10.0
+    safety_floor_m: 300.0
+    safety_safe_m: 900.0
+    pursuit_dense_scale: 0.1        # continuous (wide), not gated
+    pursuit_half_angle_deg: 45.0
+    pursuit_range_m: 4000.0
+    step_penalty: -0.005
+    survival_bonus: 0.0
+    damage_scale: 0.0
+    low_altitude_penalty: 0.0
+
+algo:
+  name: ppo
+  framework: torch
+  lr: 3.0e-4
+  gamma: 0.997
+  gae_lambda: 0.95
+  clip_param: 0.2
+  train_batch_size: 16384
+  minibatch_size: 512
+  mlp:
+    enabled: true
+    fcnet_hiddens: [256, 256]
+    fcnet_activation: tanh
+    head_fcnet_hiddens: []
+    head_fcnet_activation: tanh
+    vf_share_layers: false
+
+runtime:
+  iterations: 50                    # diagnostic length; minutes
+  num_env_runners: 4
+  num_envs_per_env_runner: 1
+  rollout_fragment_length: auto
+  batch_mode: truncate_episodes
+  save_lightweight_bundle: true
+  lightweight_bundle_frequency: 10
+  save_native_checkpoint: false
+  init_bundle: artifacts/models/team01/saddle_level_v4   # seed from v4 (8deg-cone finisher)
+
+dashboard:
+  enabled: true
+  logdir: artifacts/dashboard
+
+policy_probe:
+  enabled: false
+
+engagement_log:
+  enabled: true                     # save replays to eyeball whether it HOLDS the cone
+  interval: 10
+  steps: 600
+  episodes: 1
+  print: false
+
+notes: "Saddle test: 300m offensive start vs slow level autopilot target, wide 5deg cone. Bootstrap + control-timescale diagnostic."

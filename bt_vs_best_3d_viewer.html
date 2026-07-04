@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Best Checkpoint vs BT 3D Replay</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0d10;
+      --panel: #15191f;
+      --line: #2a3039;
+      --text: #edf3f8;
+      --muted: #95a2af;
+      --blue: #45c8ff;
+      --red: #ff665c;
+      --green: #6fe0a1;
+      --yellow: #ffe36e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      height: 100vh;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", system-ui, sans-serif;
+    }
+    .wrap {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      height: 100vh;
+    }
+    .scene {
+      position: relative;
+      min-width: 0;
+      background: linear-gradient(#111821, #080a0d 58%, #070809);
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: grab;
+    }
+    canvas:active { cursor: grabbing; }
+    .hud {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      pointer-events: none;
+    }
+    .pill {
+      padding: 7px 10px;
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 8px;
+      background: rgba(9,11,14,.72);
+      color: var(--muted);
+      font-size: 13px;
+      backdrop-filter: blur(8px);
+    }
+    .pill strong { color: var(--text); }
+    aside {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      border-left: 1px solid var(--line);
+      background: var(--panel);
+    }
+    header {
+      padding: 18px 18px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    h1 {
+      margin: 0 0 6px;
+      font-size: 19px;
+      letter-spacing: 0;
+    }
+    .sub {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .controls {
+      display: grid;
+      grid-template-columns: 46px 1fr 54px;
+      gap: 10px;
+      align-items: center;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line);
+    }
+    button {
+      height: 36px;
+      border: 1px solid #343b45;
+      border-radius: 7px;
+      background: #202733;
+      color: var(--text);
+      font: inherit;
+      cursor: pointer;
+    }
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--blue);
+    }
+    .step {
+      text-align: right;
+      color: var(--muted);
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      padding: 16px 18px;
+    }
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #11161d;
+      padding: 12px;
+      min-height: 72px;
+    }
+    .wide { grid-column: 1 / -1; }
+    .label {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+    .value {
+      font-size: 21px;
+      font-variant-numeric: tabular-nums;
+      overflow-wrap: anywhere;
+    }
+    .legend {
+      padding: 0 18px 14px;
+      display: grid;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .key { display: flex; gap: 8px; align-items: center; }
+    .swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--text);
+    }
+    .blue { background: var(--blue); }
+    .red { background: var(--red); }
+    .yellow { background: var(--yellow); }
+    .note {
+      margin-top: auto;
+      padding: 14px 18px 18px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    @media (max-width: 920px) {
+      body { overflow: auto; }
+      .wrap { grid-template-columns: 1fr; grid-template-rows: 62vh auto; height: auto; min-height: 100vh; }
+      aside { border-left: 0; border-top: 1px solid var(--line); }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="scene">
+      <canvas id="view"></canvas>
+      <div class="hud">
+        <div class="pill">Drag <strong>orbit</strong></div>
+        <div class="pill">Wheel <strong>zoom</strong></div>
+        <div class="pill">Blue <strong>best checkpoint</strong></div>
+        <div class="pill">Red <strong>BT target</strong></div>
+      </div>
+    </section>
+    <aside>
+      <header>
+        <h1>Best Checkpoint vs BT</h1>
+        <p class="sub" id="subtitle">Replay loading...</p>
+      </header>
+      <div class="controls">
+        <button id="play" title="재생/일시정지">▶</button>
+        <input id="scrub" type="range" min="0" value="0">
+        <div class="step" id="step">0/0</div>
+      </div>
+      <section class="grid">
+        <div class="metric">
+          <div class="label">Outcome</div>
+          <div class="value" id="outcome">-</div>
+        </div>
+        <div class="metric">
+          <div class="label">End</div>
+          <div class="value" id="end">-</div>
+        </div>
+        <div class="metric">
+          <div class="label">Distance</div>
+          <div class="value" id="dist">-</div>
+        </div>
+        <div class="metric">
+          <div class="label">Time</div>
+          <div class="value" id="time">-</div>
+        </div>
+        <div class="metric">
+          <div class="label">Blue Health</div>
+          <div class="value" id="ownHealth">-</div>
+        </div>
+        <div class="metric">
+          <div class="label">Red Health</div>
+          <div class="value" id="targetHealth">-</div>
+        </div>
+        <div class="metric wide">
+          <div class="label">Camera</div>
+          <div class="value" id="cam">orbit</div>
+        </div>
+      </section>
+      <div class="legend">
+        <div class="key"><span class="swatch blue"></span>RL best checkpoint 경로</div>
+        <div class="key"><span class="swatch red"></span>BT target 경로</div>
+        <div class="key"><span class="swatch yellow"></span>현재 거리 연결선</div>
+      </div>
+      <div class="note">
+        기본 데이터는 좌표계 버그 수정 + 후방 위협 break-turn 오버라이드가 반영된 최신 BT DLL과 RL best checkpoint(ic_s3_bt_v1)를 정식 JSBSim/DogFightWrapper 환경에서 실제로 교전시킨 로그입니다 (RLModule 직접 복원 경로, fast-MLP 우회 아님).
+      </div>
+    </aside>
+  </main>
+  <script src="bt_vs_best_replay_data.js"></script>
+  <script>
+    const replay = window.BT_VS_BEST_REPLAY;
+    const frames = replay.frames;
+    const meta = replay.meta;
+    const canvas = document.getElementById("view");
+    const ctx = canvas.getContext("2d");
+    const play = document.getElementById("play");
+    const scrub = document.getElementById("scrub");
+    const ui = Object.fromEntries(["subtitle","step","outcome","end","dist","time","ownHealth","targetHealth","cam"].map((id) => [id, document.getElementById(id)]));
+    let idx = 0;
+    let playing = false;
+    let last = 0;
+    let yaw = -0.72;
+    let pitch = 0.74;
+    let zoom = 1.0;
+    let dragging = false;
+    let lastMouse = [0, 0];
+
+    const all = frames.flatMap((f) => [f.own, f.target]);
+    const center = {
+      x: (Math.min(...all.map((p) => p.x)) + Math.max(...all.map((p) => p.x))) / 2,
+      y: (Math.min(...all.map((p) => p.y)) + Math.max(...all.map((p) => p.y))) / 2,
+      z: (Math.min(...all.map((p) => p.z)) + Math.max(...all.map((p) => p.z))) / 2,
+    };
+    const span = Math.max(
+      Math.max(...all.map((p) => p.x)) - Math.min(...all.map((p) => p.x)),
+      Math.max(...all.map((p) => p.y)) - Math.min(...all.map((p) => p.y)),
+      Math.max(...all.map((p) => p.z)) - Math.min(...all.map((p) => p.z)),
+      1
+    );
+
+    function resize() {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+      canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      draw();
+    }
+    function norm(p) {
+      return {
+        x: (p.x - center.x) / span,
+        y: (p.y - center.y) / span,
+        z: (p.z - center.z) / span,
+      };
+    }
+    function project(p) {
+      const q = norm(p);
+      const cy = Math.cos(yaw), sy = Math.sin(yaw);
+      const cp = Math.cos(pitch), sp = Math.sin(pitch);
+      let x = q.x * cy - q.y * sy;
+      let y = q.x * sy + q.y * cy;
+      let z = q.z;
+      let y2 = y * cp - z * sp;
+      let z2 = y * sp + z * cp;
+      const camera = 2.1 / zoom;
+      const scale = Math.min(canvas.clientWidth, canvas.clientHeight) * 0.72;
+      const f = scale / (camera + y2);
+      return {
+        x: canvas.clientWidth / 2 + x * f,
+        y: canvas.clientHeight / 2 - z2 * f,
+        depth: y2,
+      };
+    }
+    function line(a, b, color, width = 2, dash = []) {
+      const p = project(a), q = project(b);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.setLineDash(dash);
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(q.x, q.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    function poly(points, color, until) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.3;
+      ctx.beginPath();
+      for (let i = 0; i <= until; i++) {
+        const p = project(points[i]);
+        if (i === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke();
+    }
+    function dot(point, color, r) {
+      const p = project(point);
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.fill();
+      return p;
+    }
+    function aircraft(point, color, label) {
+      const p = dot(point, color, 7);
+      const dir = project({ x: point.x + Math.sin(point.yaw * Math.PI / 180) * 180, y: point.y + Math.cos(point.yaw * Math.PI / 180) * 180, z: point.z });
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(dir.x, dir.y);
+      ctx.stroke();
+      ctx.fillStyle = "#edf3f8";
+      ctx.font = "13px Segoe UI, sans-serif";
+      ctx.fillText(label, p.x + 10, p.y - 10);
+    }
+    function grid() {
+      const z = Math.min(...all.map((p) => p.z)) - 180;
+      const size = span * 0.85;
+      for (let i = -5; i <= 5; i++) {
+        const a = { x: center.x - size, y: center.y + i * size / 5, z };
+        const b = { x: center.x + size, y: center.y + i * size / 5, z };
+        const c = { x: center.x + i * size / 5, y: center.y - size, z };
+        const d = { x: center.x + i * size / 5, y: center.y + size, z };
+        line(a, b, "rgba(255,255,255,.07)", 1);
+        line(c, d, "rgba(255,255,255,.07)", 1);
+      }
+    }
+    function draw() {
+      if (!frames.length) return;
+      ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+      const g = ctx.createLinearGradient(0, 0, 0, canvas.clientHeight);
+      g.addColorStop(0, "#101923");
+      g.addColorStop(0.58, "#080b10");
+      g.addColorStop(1, "#060708");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+      grid();
+      poly(frames.map((f) => f.own), "#45c8ff", idx);
+      poly(frames.map((f) => f.target), "#ff665c", idx);
+      const f = frames[idx];
+      line(f.own, f.target, "rgba(255,227,110,.78)", 2, [8, 8]);
+      aircraft(f.own, "#45c8ff", "RL");
+      aircraft(f.target, "#ff665c", "BT");
+    }
+    function update() {
+      const f = frames[idx];
+      ui.subtitle.textContent = meta.label;
+      ui.step.textContent = `${idx}/${frames.length - 1}`;
+      ui.outcome.textContent = meta.outcome;
+      ui.end.textContent = meta.end_condition;
+      ui.dist.textContent = `${Math.round(f.distance)}m`;
+      ui.time.textContent = `${f.time.toFixed(2)}s`;
+      ui.ownHealth.textContent = f.own.health.toFixed(2);
+      ui.targetHealth.textContent = f.target.health.toFixed(2);
+      ui.cam.textContent = `yaw ${Math.round(yaw * 57.3)} / pitch ${Math.round(pitch * 57.3)} / zoom ${zoom.toFixed(1)}x`;
+      scrub.value = String(idx);
+      draw();
+    }
+    function tick(t) {
+      if (playing && t - last > 55) {
+        idx = (idx + 1) % frames.length;
+        last = t;
+        update();
+      }
+      requestAnimationFrame(tick);
+    }
+    play.addEventListener("click", () => {
+      playing = !playing;
+      play.textContent = playing ? "Ⅱ" : "▶";
+    });
+    scrub.max = String(frames.length - 1);
+    scrub.addEventListener("input", () => {
+      idx = Number(scrub.value);
+      update();
+    });
+    canvas.addEventListener("pointerdown", (e) => {
+      dragging = true;
+      lastMouse = [e.clientX, e.clientY];
+      canvas.setPointerCapture(e.pointerId);
+    });
+    canvas.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - lastMouse[0];
+      const dy = e.clientY - lastMouse[1];
+      lastMouse = [e.clientX, e.clientY];
+      yaw += dx * 0.008;
+      pitch = Math.max(0.18, Math.min(1.34, pitch + dy * 0.006));
+      update();
+    });
+    canvas.addEventListener("pointerup", () => { dragging = false; });
+    canvas.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      zoom = Math.max(0.45, Math.min(3.0, zoom * (e.deltaY > 0 ? 0.9 : 1.1)));
+      update();
+    }, { passive: false });
+    window.addEventListener("resize", resize);
+    resize();
+    update();
+    requestAnimationFrame(tick);
+  </script>
+</body>
+</html>

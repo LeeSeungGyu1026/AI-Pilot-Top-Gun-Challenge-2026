@@ -1,0 +1,141 @@
+# IC curriculum S3 v7 — boost the attack/damage reward (user request), on top
+# of v6's closure-pressure change.
+#
+# v5 fully solved the BT self-destruct exploit but plateaued at a flat, zero-
+# risk passive-draw local optimum (reward stuck ~-185, win_rate=0, near-zero
+# WEZ time/damage). v6 (pursuit_dense_scale 0.1->0.2, stronger closure
+# pressure) was launched to test whether a stronger pull toward boresight+
+# range would break that plateau, but was stopped early (iter 37/200, still
+# mid-recovery from the expected re-seed shock) per user direction to also
+# boost the ATTACK reward specifically -- closure pressure alone only helps
+# the RL get close; it doesn't reward the RL more for actually landing and
+# sustaining damage once there, which is the more direct lever for "stop
+# settling for a safe draw, start pressing the attack."
+#
+# Change: damage_dealt_scale 30.0 -> 60.0 (doubled; damage_taken_scale stays
+# at 12.0, so the asymmetry sharpens from 2.5x to 5x -- landing hits is worth
+# much more relative to the risk of taking them). Keeps v6's
+# pursuit_dense_scale=0.2 (still a reasonable, independently-justified
+# closure-pressure increase, not reverted). Seeded from v5 (the last fully
+# converged, clean checkpoint) rather than v6's interrupted mid-recovery
+# state, so this is a clean two-change step from a known-good baseline.
+#
+#   python scripts\run_experiment.py experiments\ic_s3_bt_v7.yaml
+
+name: ic_s3_bt_v7
+script: train_rllib
+
+output:
+  name: team01
+  tag: ic_s3_bt_v7
+
+env:
+  observation_mode: custom
+  observation_module: student.my_observation
+  reward_module: student.my_reward
+  target_mode: behavior_tree        # the real competition adversary (maneuvers/evades in 3D)
+  target_behavior_dll: AIP_BASE_target.dll
+  max_engage_time: 90.0
+  episode_step_limit: 5400
+
+env_config:
+  step_ratio: 6
+  observation_size: 26
+  action_slew_limit: 0.25
+  offensive_saddle:
+    enabled: true
+    range_m: [3600.0, 4200.0]
+    aspect_deg: [0.0, 30.0]
+    altitude_m: 7000.0
+    target_speed_mps: 250.0
+    own_speed_mps: 300.0
+  range_discipline:
+    enabled: true
+    max_range_m: 7000.0
+    grow_steps: 30
+  target_weave:
+    enabled: false
+    amplitude_deg: 20.0
+    period_steps: 120.0
+  target_autopilot:
+    heading_cmd: 0.0
+    altitude_cmd: -7000.0
+    speed_cmd: 250.0
+  wez:
+    angle_deg: 8.0
+    min_range_m: 152.4
+    max_range_m: 914.4
+  reward:
+    win_reward: 150.0
+    forced_ground_reward: 50.0
+    loss_reward: -150.0
+    draw_reward: -150.0
+    damage_dealt_scale: 60.0          # --- changed in v7: was 30.0, doubled ---
+    damage_taken_scale: 12.0
+    wez_entry_bonus: 20.0
+    pbrs_gamma: 0.997
+    pbrs_ata_weight: 2.0
+    pbrs_range_weight: 1.0
+    pbrs_range_log_clip: 3.0
+    pbrs_alt_weight: 10.0
+    safety_floor_m: 300.0
+    safety_safe_m: 900.0
+    pursuit_dense_scale: 0.2          # kept from v6
+    pursuit_half_angle_deg: 45.0
+    pursuit_range_m: 4000.0
+    step_penalty: -0.005
+    survival_bonus: 0.0
+    damage_scale: 0.0
+    low_altitude_penalty: 0.0
+    aspect_cone_deg: 30.0
+    front_cone_penalty_scale: 0.3
+    rear_cone_reward_scale: 0.3
+    critical_alt_margin_m: 100.0
+    altitude_floor_penalty_scale: 25.0
+    altitude_floor_penalty_exponent: 2.0
+
+algo:
+  name: ppo
+  framework: torch
+  lr: 3.0e-4
+  gamma: 0.997
+  gae_lambda: 0.95
+  clip_param: 0.2
+  train_batch_size: 16384
+  minibatch_size: 512
+  mlp:
+    enabled: true
+    fcnet_hiddens: [256, 256]
+    fcnet_activation: tanh
+    head_fcnet_hiddens: []
+    head_fcnet_activation: tanh
+    vf_share_layers: false
+
+runtime:
+  iterations: 200
+  num_env_runners: 4
+  num_envs_per_env_runner: 1
+  rollout_fragment_length: auto
+  batch_mode: truncate_episodes
+  save_lightweight_bundle: true
+  lightweight_bundle_frequency: 10
+  save_native_checkpoint: false
+  # Seed from v5 (last fully converged, clean checkpoint), not v6 (killed
+  # mid-recovery at iter 37/200) -- clean two-change step from known-good state.
+  init_bundle: artifacts/models/team01/ic_s3_bt_v5
+
+dashboard:
+  enabled: true
+  logdir: artifacts/dashboard
+
+policy_probe:
+  enabled: false
+
+engagement_log:
+  enabled: true
+  interval: 10
+  steps: 900
+  episodes: 1
+  print: false
+
+notes: "IC S3 v7: user-requested attack-reward boost -- damage_dealt_scale 30->60 (doubled, sharpens dealt:taken asymmetry to 5x) on top of v6's pursuit_dense_scale 0.1->0.2, seeded from v5 (clean baseline) to break the flat safe-draw plateau v5 converged to."

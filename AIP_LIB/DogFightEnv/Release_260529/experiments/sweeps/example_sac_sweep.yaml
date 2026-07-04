@@ -1,0 +1,34 @@
+# Example parallel sweep: SAC learning-rate x network-size grid.
+#
+# dry-run (generates YAMLs, prints the exact training commands, starts nothing):
+#   python scripts\run_parallel.py experiments\sweeps\example_sac_sweep.yaml --dry-run
+# run:
+#   python scripts\run_parallel.py experiments\sweeps\example_sac_sweep.yaml
+#
+# Outputs (per run, tag = <name>_<param-labels>):
+#   experiments/generated/<name>/<tag>.yaml   - exact config used (reproducibility)
+#   artifacts/sweeps/<name>/<tag>.log         - training stdout/stderr
+#   artifacts/sweeps/<name>/manifest.json     - run status + params overview
+#   artifacts/models/<output.name>/<tag>/     - policy bundles (submission format)
+#   artifacts/logs/<output.name>/<tag>/       - training_log.csv etc.
+#   artifacts/dashboard/<output.name>_<tag>/  - dashboard metrics.jsonl
+
+name: sac_lr_net_sweep
+base: experiments/student_sac_mlp.yaml
+
+# 16 threads / 16GB RAM: 2-3 concurrent runs is a safe ceiling
+# (each run = 1 learner + num_env_runners env workers + its own Ray session).
+max_parallel: 2
+
+# >1 repeats the same config multiple times (different stochastic seeds).
+repeats: 1
+
+# Applied to every variant. Dotted keys address nested YAML fields.
+overrides:
+  runtime.iterations: 50
+  policy_probe.print: false
+
+# Cartesian product -> 2 x 2 = 4 runs.
+grid:
+  algo.lr: [3.0e-4, 1.0e-3]
+  algo.mlp.fcnet_hiddens: [[256, 256], [512, 512]]

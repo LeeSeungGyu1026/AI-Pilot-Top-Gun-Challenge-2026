@@ -1,0 +1,149 @@
+# IC curriculum S3 v6 — strengthen closure/engagement pressure, single new variable.
+#
+# v5 (widened offensive_saddle to 3600-4200m) fully solved the BT self-destruct
+# exploit: forced-ground down to 0.21% (was 81-82%), own-crash recovered to
+# ~0.000 after the expected iter 0-9 re-seed shock. But it exposed the next
+# wall: the last 25/150 iterations show reward_mean FLAT at -180 to -190 with
+# zero visible trend, win_rate=0.000 on every row, ep_wez_steps mostly 0.00,
+# ep_reward_damage mostly ~0. ep_min_distance sits stable at 590-830m (inside
+# WEZ range 152-914m) but the policy isn't converting proximity into sustained
+# cone time or damage -- it found a passive "close to a comfortable distance,
+# then orbit to a guaranteed timeout" plateau. Since draw_reward == loss_reward
+# == -150 already, that plateau is exactly as bad on paper as trying and
+# failing, but it's zero-risk vs the real risk of pressing an attack (getting
+# hit, or crashing) -- so PPO settled there. Same class of "safe-draw
+# attractor" the project fought early in the S2 flat-run stage; recurring here
+# because the new, much larger range needs stronger closure/engagement
+# pressure than the existing reward provides at this distance.
+#
+# Ruled out first: the platform has no PPO entropy-coefficient knob at all
+# (train_rllib.py has no --entropy-coeff flag; --target-entropy is SAC-only,
+# confirmed via source read) -- an exploration-strength lever simply isn't
+# available here.
+#
+# Fix: double pursuit_dense_scale (0.1 -> 0.2) -- the existing continuous,
+# un-gated closure/boresight term (kept un-gated per the project's own
+# "gating deletes signal" lesson; only the SCALE changes, not its shape or
+# range gate). Also extend iterations 150 -> 200: escaping a flat plateau may
+# take time even with a stronger signal. Both changes target the same
+# diagnosed problem (weak pressure to convert proximity into an actual
+# engagement), so treated as one experimental step. Seeded from v5's own
+# bundle (keep the range-appropriate flight/closure skill already learned).
+#
+#   python scripts\run_experiment.py experiments\ic_s3_bt_v6.yaml
+
+name: ic_s3_bt_v6
+script: train_rllib
+
+output:
+  name: team01
+  tag: ic_s3_bt_v6
+
+env:
+  observation_mode: custom
+  observation_module: student.my_observation
+  reward_module: student.my_reward
+  target_mode: behavior_tree        # the real competition adversary (maneuvers/evades in 3D)
+  target_behavior_dll: AIP_BASE_target.dll
+  max_engage_time: 90.0
+  episode_step_limit: 5400
+
+env_config:
+  step_ratio: 6
+  observation_size: 26
+  action_slew_limit: 0.25
+  offensive_saddle:
+    enabled: true
+    range_m: [3600.0, 4200.0]
+    aspect_deg: [0.0, 30.0]
+    altitude_m: 7000.0
+    target_speed_mps: 250.0
+    own_speed_mps: 300.0
+  range_discipline:
+    enabled: true
+    max_range_m: 7000.0
+    grow_steps: 30
+  target_weave:
+    enabled: false
+    amplitude_deg: 20.0
+    period_steps: 120.0
+  target_autopilot:
+    heading_cmd: 0.0
+    altitude_cmd: -7000.0
+    speed_cmd: 250.0
+  wez:
+    angle_deg: 8.0
+    min_range_m: 152.4
+    max_range_m: 914.4
+  reward:
+    win_reward: 150.0
+    forced_ground_reward: 50.0
+    loss_reward: -150.0
+    draw_reward: -150.0
+    damage_dealt_scale: 30.0
+    damage_taken_scale: 12.0
+    wez_entry_bonus: 20.0
+    pbrs_gamma: 0.997
+    pbrs_ata_weight: 2.0
+    pbrs_range_weight: 1.0
+    pbrs_range_log_clip: 3.0
+    pbrs_alt_weight: 10.0
+    safety_floor_m: 300.0
+    safety_safe_m: 900.0
+    pursuit_dense_scale: 0.2          # --- changed in v6: was 0.1 ---
+    pursuit_half_angle_deg: 45.0
+    pursuit_range_m: 4000.0
+    step_penalty: -0.005
+    survival_bonus: 0.0
+    damage_scale: 0.0
+    low_altitude_penalty: 0.0
+    aspect_cone_deg: 30.0
+    front_cone_penalty_scale: 0.3
+    rear_cone_reward_scale: 0.3
+    critical_alt_margin_m: 100.0
+    altitude_floor_penalty_scale: 25.0
+    altitude_floor_penalty_exponent: 2.0
+
+algo:
+  name: ppo
+  framework: torch
+  lr: 3.0e-4
+  gamma: 0.997
+  gae_lambda: 0.95
+  clip_param: 0.2
+  train_batch_size: 16384
+  minibatch_size: 512
+  mlp:
+    enabled: true
+    fcnet_hiddens: [256, 256]
+    fcnet_activation: tanh
+    head_fcnet_hiddens: []
+    head_fcnet_activation: tanh
+    vf_share_layers: false
+
+runtime:
+  iterations: 200                    # bumped from 150 -- see header
+  num_env_runners: 4
+  num_envs_per_env_runner: 1
+  rollout_fragment_length: auto
+  batch_mode: truncate_episodes
+  save_lightweight_bundle: true
+  lightweight_bundle_frequency: 10
+  save_native_checkpoint: false
+  init_bundle: artifacts/models/team01/ic_s3_bt_v5
+
+dashboard:
+  enabled: true
+  logdir: artifacts/dashboard
+
+policy_probe:
+  enabled: false
+
+engagement_log:
+  enabled: true
+  interval: 10
+  steps: 900
+  episodes: 1
+  print: false
+
+notes: "IC S3 v6: v5 solved BT self-destruct (forced-ground 82%->0.2%) but plateaued at a flat, zero-risk passive-draw local optimum (reward stuck ~-185, win_rate=0, near-zero WEZ time/damage for 25+ iterations). No PPO entropy-coeff knob available on this platform (checked). Fix: pursuit_dense_scale 0.1->0.2 (stronger closure/engagement pressure, still continuous/un-gated) + iterations 150->200, seeded from v5."

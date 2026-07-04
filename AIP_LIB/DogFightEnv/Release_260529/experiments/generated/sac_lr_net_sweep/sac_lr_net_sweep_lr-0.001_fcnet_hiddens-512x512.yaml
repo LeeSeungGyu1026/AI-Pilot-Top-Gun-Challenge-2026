@@ -1,0 +1,77 @@
+name: student_sac_mlp_sac_lr_net_sweep_lr-0.001_fcnet_hiddens-512x512
+script: train_rllib
+output:
+  name: test_mlp
+  tag: sac_lr_net_sweep_lr-0.001_fcnet_hiddens-512x512
+env:
+  observation_mode: tactical16
+  target_mode: behavior_tree
+  target_behavior_dll: AIP_BASE_target.dll
+  max_engage_time: 60.0
+  episode_step_limit: 3600
+env_config:
+  step_ratio: 6
+  wez:
+    angle_deg: 2.0
+    min_range_m: 152.4
+    max_range_m: 914.4
+  target_loiter:
+    enabled: true
+    bank: 30.0
+    pitch: 0.0
+  target_autopilot:
+    heading_cmd: 180.0
+    altitude_cmd: 7000.0
+    speed_cmd: 250.0
+  reward:
+    mode: default
+    step_penalty: -0.01
+    damage_scale: 20.0
+    pursuit_scale: 0.3
+    low_altitude_penalty: 0.1
+    win_reward: 100.0
+    loss_reward: -100.0
+    draw_reward: -30.0
+algo:
+  name: sac
+  framework: torch
+  lr: 0.001
+  gamma: 0.99
+  train_batch_size: 256
+  minibatch_size: 256
+  tau: 0.005
+  target_entropy: auto
+  replay_buffer_capacity: 10000
+  mlp:
+    enabled: true
+    fcnet_hiddens:
+    - 512
+    - 512
+    fcnet_activation: relu
+    head_fcnet_hiddens: []
+    head_fcnet_activation: relu
+runtime:
+  iterations: 50
+  num_env_runners: 1
+  num_envs_per_env_runner: 1
+  rollout_fragment_length: auto
+  batch_mode: truncate_episodes
+  save_lightweight_bundle: true
+  lightweight_bundle_frequency: 5
+  save_native_checkpoint: true
+  native_checkpoint_frequency: 25
+dashboard:
+  enabled: true
+  logdir: artifacts/dashboard
+policy_probe:
+  enabled: true
+  interval: 10
+  steps: 4
+  print: false
+engagement_log:
+  enabled: false
+  interval: 10
+  steps: 600
+  episodes: 1
+  print: true
+notes: Student SAC MLP baseline. Edit env/algo/runtime/log sections for experiments.

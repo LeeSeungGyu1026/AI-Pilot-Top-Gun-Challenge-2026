@@ -1,0 +1,154 @@
+# IC curriculum S3 v4 — reward-only fix on top of v3.
+#
+# v3 (BT hard-floor fix) trained cleanly (own-crash way down vs v1/v2) but its
+# training_log.csv (iters 73-82) showed win_rate/loss_rate/timeout_rate/
+# crash_rate ALL pinned at 0.0 while reward_mean climbed 176->182 -- the
+# platform's own classifier has no bucket for "target altitude below min", so
+# it silently doesn't count these terminations at all. ep_wez_steps stayed
+# ~8-11 of a ~240-step episode and ep_reward_damage stayed ~3-4 (of a possible
+# ~30 for a full kill), and tools/end_condition_breakdown.py on the raw log
+# confirmed ~75%+ of terminations were "target altitude below min" with 0%
+# "target destroyed". Root cause: student/my_reward.py paid the SAME
+# win_reward (150) for a genuine kill and for the BT merely panicking into the
+# ground while still alive -- combined with the aspect-shaping reward for
+# sitting in the BT's six (which is also the trigger condition for the BT's
+# most panic-prone defensive maneuvers), PPO learned to camp on the BT's tail
+# and wait it out rather than pressing for a kill shot.
+#
+# Fix (student/my_reward.py): split the terminal payoff --
+#   - win_reward (150)          : target_hp <= 0 (genuine kill), unchanged
+#   - forced_ground_reward (50) : target altitude below min while target_hp > 0
+#                                 (still a legal win, paid far less)
+# No other reward term changed, and the BT DLL / hyperparameters are the same
+# as v3 -- this isolates the terminal-payoff split as the only new variable.
+#
+# Seeded from v3's own final bundle (not from scratch) since v3 already
+# learned useful BT-specific tracking/pursuit behavior (own-crash rate way
+# down) that should transfer; only the terminal incentive changes.
+#
+# Watch for: ep_wez_steps and ep_reward_damage should rise (more/sustained
+# WEZ dwell, more actual damage per episode) as the policy re-optimizes toward
+# real kills; "target destroyed" share (tools/end_condition_breakdown.py)
+# should become nonzero and grow. If reward_mean initially drops after the
+# re-seed, that's expected (forced-ground got cheaper) -- watch the
+# kill-share trend, not raw reward_mean, for this run.
+#
+#   python scripts\run_experiment.py experiments\ic_s3_bt_v4.yaml
+
+name: ic_s3_bt_v4
+script: train_rllib
+
+output:
+  name: team01
+  tag: ic_s3_bt_v4
+
+env:
+  observation_mode: custom
+  observation_module: student.my_observation
+  reward_module: student.my_reward
+  target_mode: behavior_tree        # the real competition adversary (maneuvers/evades in 3D)
+  target_behavior_dll: AIP_BASE_target.dll
+  max_engage_time: 90.0
+  episode_step_limit: 5400
+
+env_config:
+  step_ratio: 6
+  observation_size: 26
+  action_slew_limit: 0.25
+  offensive_saddle:
+    enabled: true
+    range_m: [1100.0, 1450.0]       # competition range; agent starts locked-on behind the BT
+    aspect_deg: [0.0, 30.0]
+    altitude_m: 7000.0
+    target_speed_mps: 250.0
+    own_speed_mps: 300.0
+  range_discipline:                 # keep the proven exploit-blocker / aggression pressure
+    enabled: true
+    max_range_m: 2500.0
+    grow_steps: 30
+  target_weave:
+    enabled: false                  # inert vs BT anyway (only fires when target_mode==autopilot)
+    amplitude_deg: 20.0
+    period_steps: 120.0
+  target_autopilot:                 # inert under behavior_tree; kept for config completeness
+    heading_cmd: 0.0
+    altitude_cmd: -7000.0
+    speed_cmd: 250.0
+  wez:
+    angle_deg: 8.0                  # keep WIDE shaping cone (narrowing collapsed the policy before)
+    min_range_m: 152.4
+    max_range_m: 914.4
+  reward:
+    win_reward: 150.0
+    forced_ground_reward: 50.0      # --- new in v4: see header ---
+    loss_reward: -150.0
+    draw_reward: -150.0
+    damage_dealt_scale: 30.0
+    damage_taken_scale: 12.0
+    wez_entry_bonus: 20.0
+    pbrs_gamma: 0.997
+    pbrs_ata_weight: 2.0
+    pbrs_range_weight: 1.0
+    pbrs_range_log_clip: 3.0
+    pbrs_alt_weight: 10.0
+    safety_floor_m: 300.0
+    safety_safe_m: 900.0
+    pursuit_dense_scale: 0.1
+    pursuit_half_angle_deg: 45.0
+    pursuit_range_m: 4000.0
+    step_penalty: -0.005
+    survival_bonus: 0.0
+    damage_scale: 0.0
+    low_altitude_penalty: 0.0
+    aspect_cone_deg: 30.0
+    front_cone_penalty_scale: 0.3
+    rear_cone_reward_scale: 0.3
+    critical_alt_margin_m: 100.0
+    altitude_floor_penalty_scale: 25.0
+    altitude_floor_penalty_exponent: 2.0
+
+algo:
+  name: ppo
+  framework: torch
+  lr: 3.0e-4
+  gamma: 0.997
+  gae_lambda: 0.95
+  clip_param: 0.2
+  train_batch_size: 16384
+  minibatch_size: 512
+  mlp:
+    enabled: true
+    fcnet_hiddens: [256, 256]
+    fcnet_activation: tanh
+    head_fcnet_hiddens: []
+    head_fcnet_activation: tanh
+    vf_share_layers: false
+
+runtime:
+  iterations: 100
+  num_env_runners: 4
+  num_envs_per_env_runner: 1
+  rollout_fragment_length: auto
+  batch_mode: truncate_episodes
+  save_lightweight_bundle: true
+  lightweight_bundle_frequency: 10
+  save_native_checkpoint: false
+  # Seed from v3's own final bundle -- keep the BT-specific tracking skill it
+  # already learned, only the terminal incentive changes.
+  init_bundle: artifacts/models/team01/ic_s3_bt_v3
+
+dashboard:
+  enabled: true
+  logdir: artifacts/dashboard
+
+policy_probe:
+  enabled: false
+
+engagement_log:
+  enabled: true
+  interval: 10
+  steps: 900
+  episodes: 1
+  print: false
+
+notes: "IC S3 v4: same as v3 (BT hard-floor fix), reward change only -- split win_reward (real kill) from a lower forced_ground_reward (BT self-crash while still alive) so PPO stops preferring to harass the BT into panicking over closing for an actual kill."

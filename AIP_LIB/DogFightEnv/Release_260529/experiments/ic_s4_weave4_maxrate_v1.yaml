@@ -1,0 +1,138 @@
+# ic_s4 weave curriculum, STAGE 1 (gentle 3D weave).
+#
+# Seed = v15 bundle_000070 (win_rate 1.00 vs slow LEVEL autopilot; exploit-free
+# v15 reward kept unchanged). Now generalize from a level target to a 3D-weaving
+# one. Ladder (each stage seeds from the previous stage's converged bundle,
+# advance when win_rate holds ~>=0.9): stage1 gentle -> stage2 moderate ->
+# stage3 strong -> stage4 max-rate turn. Weave is BOTH horizontal (heading) and
+# vertical (altitude), each on its own period; straight_prob keeps a fraction of
+# episodes straight & level so the mastered level-kill skill is not forgotten.
+
+name: ic_s4_weave4_maxrate_v1
+script: train_rllib
+
+output:
+  name: team01
+  tag: ic_s4_weave4_maxrate_v1
+
+env:
+  observation_mode: custom
+  observation_module: student.my_observation
+  reward_module: student.codex_reward_v15_wez_only
+  target_mode: autopilot
+  max_engage_time: 90.0
+  episode_step_limit: 2700
+
+env_config:
+  step_ratio: 6
+  observation_size: 26
+  action_slew_limit: 0.25
+  offensive_saddle:
+    enabled: true
+    range_m: [500.0, 850.0]
+    aspect_deg: [0.0, 14.0]
+    altitude_m: 7000.0
+    target_speed_mps: 250.0
+    own_speed_mps: 260.0
+  range_discipline:
+    enabled: true
+    max_range_m: 3500.0
+    grow_steps: 30
+  target_weave:
+    enabled: true
+    # Stage 4 (MAX-RATE turn). Amplitude+rate large enough that the commanded
+    # heading rate (~120deg over ~half of 70 wrapper-steps) exceeds the target's
+    # physical turn capability, so the autopilot saturates into a near-continuous
+    # maximum-rate turn -- the hardest evading opponent this weave model can make.
+    amplitude_deg: 120.0         # left/right heading swing
+    period_steps: 70.0
+    vertical_amplitude_m: 1000.0 # up/down altitude swing (metres)
+    vertical_period_steps: 60.0
+    straight_prob: 0.10          # anti-forgetting straight-&-level fraction
+  target_autopilot:
+    heading_cmd: 0.0
+    altitude_cmd: -7000.0
+    speed_cmd: 250.0
+  wez:
+    angle_deg: 2.0
+    min_range_m: 152.4
+    max_range_m: 914.4
+  reward:
+    win_reward: 220.0
+    forced_ground_reward: 0.0
+    loss_reward: -150.0
+    draw_reward: -100.0
+    damage_dealt_scale: 350.0
+    damage_taken_scale: 3.0
+    wez_entry_bonus: 0.0
+    wez_shaping_cone_deg: 90.0
+    wez_precision_bonus_min: 0.0
+    wez_precision_bonus_max: 0.0
+    fast_kill_bonus_max: 110.0
+    fast_kill_horizon_s: 90.0
+    fast_kill_bonus_floor_frac: 0.2
+    pbrs_gamma: 0.997
+    pbrs_ata_weight: 4.0
+    pbrs_range_weight: 1.0
+    pbrs_range_log_clip: 3.0
+    pbrs_alt_weight: 10.0
+    safety_floor_m: 300.0
+    safety_safe_m: 900.0
+    pursuit_dense_scale: 0.0
+    pursuit_half_angle_deg: 45.0
+    pursuit_range_m: 2500.0
+    step_penalty: -0.005
+    survival_bonus: 0.0
+    damage_scale: 0.0
+    low_altitude_penalty: 0.0
+    aspect_cone_deg: 30.0
+    front_cone_penalty_scale: 0.1
+    rear_cone_reward_scale: 0.0
+    critical_alt_margin_m: 300.0
+    altitude_floor_penalty_min: 1.0
+    altitude_floor_penalty_max: 1000.0
+    reward_output_scale: 0.05
+
+algo:
+  name: ppo
+  framework: torch
+  lr: 3.0e-5
+  gamma: 0.997
+  gae_lambda: 0.95
+  clip_param: 0.08
+  train_batch_size: 16384
+  minibatch_size: 512
+  mlp:
+    enabled: true
+    fcnet_hiddens: [256, 256]
+    fcnet_activation: tanh
+    head_fcnet_hiddens: []
+    head_fcnet_activation: tanh
+    vf_share_layers: false
+
+runtime:
+  iterations: 150
+  num_env_runners: 4
+  num_envs_per_env_runner: 1
+  rollout_fragment_length: auto
+  batch_mode: truncate_episodes
+  save_lightweight_bundle: true
+  lightweight_bundle_frequency: 10
+  save_native_checkpoint: false
+  init_bundle: artifacts/models/team01/ic_s4_weave3_strong_v1/bundle_000020
+
+dashboard:
+  enabled: true
+  logdir: artifacts/dashboard
+
+policy_probe:
+  enabled: false
+
+engagement_log:
+  enabled: true
+  interval: 5
+  steps: 900
+  episodes: 1
+  print: false
+
+notes: "ic_s4 STAGE 4 FINAL (max-rate turn target). Stage 3 (strong) converged to ~0.99-1.00 by iter21-28 (crash 0), advance. Weave = heading +/-120deg (period 70) AND altitude +/-1000m (period 60), straight_prob 0.10 -- commanded heading rate exceeds the target's turn capability so it saturates into a near-continuous max-rate turn (the hardest evader this weave model produces). Reward = exploit-free v15. Seed stage3 bundle_000020. 150 iters (this is the final, hardest stage -- let it run to convergence). Success = win holds high (~>=0.9) against the max-rate turner while the straight 10% stay 1.0; crash must stay ~0 (1000m vertical swings still clear the 300m floor at 7000m base). This bundle is the competition-facing champion vs a hard-maneuvering autopilot; next real step after this is the BT opponent."

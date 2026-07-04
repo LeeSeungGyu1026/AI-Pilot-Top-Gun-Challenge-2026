@@ -1,0 +1,122 @@
+# Codex S4 loiter guard: repair loiter/autopilot robustness before SAC.
+#
+# Source: ic_s3_bt_v1 wins BT reliably, but codex validation ladder found
+# autopilot 85/10/5 and loiter 30/10/60 (win/loss/draw). This branch keeps the
+# same offensive-saddle geometry and PPO policy family, but fine-tunes against
+# loiter with stronger altitude safety and more close-range pursuit pressure.
+#
+# Run:
+#   python scripts/run_experiment.py experiments/codex_ic_s4_loiter_guard_v1.yaml
+
+name: codex_ic_s4_loiter_guard
+script: train_rllib
+
+output:
+  name: team01
+  tag: codex_ic_s4_loiter_guard_v1
+
+env:
+  observation_mode: custom
+  observation_module: student.my_observation
+  reward_module: student.my_reward
+  target_mode: loiter
+  target_behavior_dll: AIP_BASE_target.dll
+  max_engage_time: 120.0
+  episode_step_limit: 7200
+
+env_config:
+  step_ratio: 6
+  observation_size: 26
+  action_slew_limit: 0.25
+  offensive_saddle:
+    enabled: true
+    range_m: [1100.0, 1450.0]
+    aspect_deg: [0.0, 30.0]
+    altitude_m: 7000.0
+    target_speed_mps: 250.0
+    own_speed_mps: 300.0
+  range_discipline:
+    enabled: true
+    max_range_m: 2500.0
+    grow_steps: 30
+  target_loiter:
+    enabled: true
+    bank: 45.0
+    pitch: 0.0
+  target_autopilot:
+    heading_cmd: 0.0
+    altitude_cmd: -7000.0
+    speed_cmd: 250.0
+  target_weave:
+    enabled: false
+    amplitude_deg: 20.0
+    period_steps: 120.0
+  wez:
+    angle_deg: 8.0
+    min_range_m: 152.4
+    max_range_m: 914.4
+  reward:
+    win_reward: 150.0
+    loss_reward: -150.0
+    draw_reward: -150.0
+    damage_dealt_scale: 30.0
+    damage_taken_scale: 12.0
+    wez_entry_bonus: 20.0
+    pbrs_gamma: 0.997
+    pbrs_ata_weight: 2.0
+    pbrs_range_weight: 1.0
+    pbrs_range_log_clip: 3.0
+    pbrs_alt_weight: 15.0
+    safety_floor_m: 450.0
+    safety_safe_m: 1200.0
+    pursuit_dense_scale: 0.16
+    pursuit_half_angle_deg: 45.0
+    pursuit_range_m: 3500.0
+    step_penalty: -0.005
+    survival_bonus: 0.0
+    damage_scale: 0.0
+    low_altitude_penalty: 0.0
+
+algo:
+  name: ppo
+  framework: torch
+  lr: 2.0e-4
+  gamma: 0.997
+  gae_lambda: 0.95
+  clip_param: 0.2
+  train_batch_size: 16384
+  minibatch_size: 512
+  mlp:
+    enabled: true
+    fcnet_hiddens: [256, 256]
+    fcnet_activation: tanh
+    head_fcnet_hiddens: []
+    head_fcnet_activation: tanh
+    vf_share_layers: false
+
+runtime:
+  iterations: 30
+  num_env_runners: 4
+  num_envs_per_env_runner: 1
+  rollout_fragment_length: auto
+  batch_mode: truncate_episodes
+  save_lightweight_bundle: true
+  lightweight_bundle_frequency: 10
+  save_native_checkpoint: false
+  init_bundle: artifacts/models/team01/ic_s3_bt_v1
+
+dashboard:
+  enabled: true
+  logdir: artifacts/dashboard
+
+policy_probe:
+  enabled: false
+
+engagement_log:
+  enabled: true
+  interval: 10
+  steps: 1200
+  episodes: 1
+  print: false
+
+notes: "codex S4: loiter guard fine-tune from ic_s3_bt_v1; repair loiter/autopilot loss/draw before SAC."

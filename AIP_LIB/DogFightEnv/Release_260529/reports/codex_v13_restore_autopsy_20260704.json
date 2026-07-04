@@ -1,0 +1,62 @@
+{
+  "experiment_yaml": "C:\\Users\\GYU\\Desktop\\KAU\\AI Pilot Top Gun Challenge 2026\\AIP_LIB\\DogFightEnv\\Release_260529\\experiments\\codex_ic_s3_v13_rewardfix_rear_gunnery_v1.yaml",
+  "bundle": "C:\\Users\\GYU\\Desktop\\KAU\\AI Pilot Top Gun Challenge 2026\\AIP_LIB\\DogFightEnv\\Release_260529\\artifacts\\models\\team01\\codex_ic_s3_v12b_level_rear_randomized_300_v1\\bundle_000110",
+  "bundle_metadata_iteration": 110,
+  "bundle_hash": "dca992003806dd5d365145d7b27453281c14eac7b2b1422a672f3d9fd8e24b7d",
+  "train_module_hash_before": "8d03a0379ca3b2eb3cff4a8a5a0aff8ae38297f7a6d5c79e18e1965c5648b8fd",
+  "train_module_hash_after": "dca992003806dd5d365145d7b27453281c14eac7b2b1422a672f3d9fd8e24b7d",
+  "env_runner_module_hash_before": "8d03a0379ca3b2eb3cff4a8a5a0aff8ae38297f7a6d5c79e18e1965c5648b8fd",
+  "env_runner_module_hash_after": "dca992003806dd5d365145d7b27453281c14eac7b2b1422a672f3d9fd8e24b7d",
+  "train_module_matches_bundle_after": true,
+  "env_runner_module_matches_bundle_after": true,
+  "train_module_changed_by_apply": true,
+  "env_runner_module_changed_by_apply": true,
+  "train_compare_after": {
+    "expected_key_count": 7,
+    "actual_key_count": 7,
+    "common_key_count": 7,
+    "missing_keys": [],
+    "unexpected_keys": [],
+    "mismatch_count": 0,
+    "max_abs_diff": 0.0,
+    "first_mismatches": []
+  },
+  "env_runner_compare_after": {
+    "expected_key_count": 7,
+    "actual_key_count": 7,
+    "common_key_count": 7,
+    "missing_keys": [],
+    "unexpected_keys": [],
+    "mismatch_count": 0,
+    "max_abs_diff": 0.0,
+    "first_mismatches": []
+  },
+  "bundle_pi_bias_entropy": {
+    "log_std": [
+      0.07391714304685593,
+      0.007798952516168356,
+      -0.036214035004377365,
+      -0.008373863063752651
+    ],
+    "entropy_estimate": 5.712882330313585
+  },
+  "train_after_pi_bias_entropy": {
+    "log_std": [
+      0.07391714304685593,
+      0.007798952516168356,
+      -0.036214035004377365,
+      -0.008373863063752651
+    ],
+    "entropy_estimate": 5.712882330313585
+  },
+  "env_after_pi_bias_entropy": {
+    "log_std": [
+      0.07391714304685593,
+      0.007798952516168356,
+      -0.036214035004377365,
+      -0.008373863063752651
+    ],
+    "entropy_estimate": 5.712882330313585
+  },
+  "apply_metadata_algorithm_class": "PPO"
+}

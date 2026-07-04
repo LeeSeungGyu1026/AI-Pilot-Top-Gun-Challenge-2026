@@ -1,0 +1,145 @@
+# Team baseline: PPO + custom 26-D observation + PBRS reward + mixed initial geometry.
+#
+# This is the "locked" week-1 config — iterate on reward/observation, not on
+# these hyperparameters. (Advice: PPO is the boring, debuggable choice; the
+# real constraint is number of experiments.)
+#
+# dry-run:
+#   python scripts\run_experiment.py experiments\team_ppo_mlp.yaml --dry-run
+# smoke (set runtime.iterations: 2 first, or use the sweep below):
+#   python scripts\run_experiment.py experiments\team_ppo_mlp.yaml
+#
+# Known limitations of the YAML->CLI mapping (run_experiment.py): no entropy
+# coefficient or initial action-std knobs are exposed. If replays all look
+# identical (premature convergence / "scissors trap"), that is the first
+# platform feature to ask the organizers about.
+
+name: team_ppo_mlp
+script: train_rllib
+
+output:
+  name: team01
+  tag: ppo_tgc26_close_v2   # v1 loitered at ~1.1km; v2 range-gates pursuit to force closure
+
+env:
+  observation_mode: custom
+  observation_module: student.my_observation   # tgc26 — must match at inference!
+  reward_module: student.my_reward
+  target_mode: behavior_tree
+  target_behavior_dll: AIP_BASE_target.dll
+  max_engage_time: 300.0
+  episode_step_limit: 18000
+
+env_config:
+  step_ratio: 6
+  observation_size: 26             # custom-obs reload fix (saved into bundle); must equal OBSERVATION_SIZE
+  # Action slew limiter (in DogFightEnvWrapper): hard rate-limit on per-step
+  # action change. Prevents bang-bang reversals that cause "FDM update fail"
+  # simulator blowups. 0 disables.
+  action_slew_limit: 0.25
+  # GOAL-RADIUS curriculum, folded into one knob: start with a WIDENED gun cone
+  # so first WEZ contact is easy to reinforce, then NARROW to the true 2.0 deg.
+  # Recommended sequence (each later run resumes weights via --init-bundle):
+  #   5.0  ->  3.0  ->  2.0   (true competition cone)
+  # NOTE: this is the actual damage model and is symmetric (the BT also gets
+  # the wider cone), which is fine vs the loiter/BT targets here.
+  wez:
+    angle_deg: 5.0
+    min_range_m: 152.4
+    max_range_m: 914.4
+  # Mixed initial geometry (cheapest generalization tool): reset picks one of
+  # 8 scenarios — indices 0-4 vs BT target, 5-7 vs loiter target.
+  initial_scenario:
+    mode: ref_old_random
+    legacy_use_random_scenario: true
+    legacy_use_first_scenario_only: false
+    legacy_scenario_indices: [0, 1, 2, 3, 4, 5, 6, 7]
+    legacy_randomization:
+      aircraft_radius_m: 100.0
+      roll_deg: 5.0
+      pitch_deg: 5.0
+      heading_deg: 5.0
+      shared_n_m: 4000.0
+      shared_e_m: 4000.0
+      shared_d_m: 4000.0
+      target_distance_n_m: 300.0
+      speed_mps: 50.0
+      loiter_bank_deg_range: [40.0, 70.0]
+  # Full custom reward config (student.my_reward reads these keys).
+  # Defined here so every weight is sweepable via run_parallel grid keys
+  # (env_config.reward.*) and recorded in config.json.
+  reward:
+    win_reward: 150.0
+    loss_reward: -150.0
+    draw_reward: -150.0          # = loss: removes the safe-draw / loiter attractor
+    damage_dealt_scale: 30.0
+    damage_taken_scale: 12.0
+    wez_entry_bonus: 20.0        # one-time, first WEZ entry per episode
+    pbrs_gamma: 1.0              # PBRS shaping discount; 1.0 = clean telescoping logs (see my_reward.py)
+    pbrs_ata_weight: 2.0
+    pbrs_range_weight: 1.0
+    pbrs_range_log_clip: 3.0
+    pbrs_alt_weight: 10.0        # altitude PBRS (recovery gradient; replaces flat penalty)
+    safety_floor_m: 300.0        # = env min_altitude
+    safety_safe_m: 900.0
+    # v2: range-GATE the dense pursuit so it is only collectible close in
+    # (must close to earn it) and strong enough to overcome closing risk.
+    # range_factor = max(0, 1 - d/1200): ~0.08 at 1.1km (old loiter spot) but
+    # ~0.56 at WEZ-mid 533m -> a clear gradient to close the last 600m, where
+    # the 5deg cone + wez_entry_bonus + damage can bootstrap first wins.
+    pursuit_dense_scale: 0.3
+    pursuit_half_angle_deg: 45.0
+    pursuit_range_m: 1200.0
+    step_penalty: -0.005
+    survival_bonus: 0.0
+    # unused by student.my_reward — kept because the platform record writer
+    # (describe_reward) hard-indexes these default-reward keys
+    damage_scale: 0.0
+    low_altitude_penalty: 0.0
+
+algo:
+  name: ppo
+  framework: torch
+  lr: 3.0e-4
+  gamma: 0.997                   # ~1-6k policy steps/episode -> long horizon
+  gae_lambda: 0.95
+  clip_param: 0.2
+  train_batch_size: 16384        # more episodes/update -> stabler gradients
+  minibatch_size: 512
+  mlp:
+    enabled: true
+    fcnet_hiddens: [256, 256]
+    fcnet_activation: tanh       # smoother control surfaces than relu
+    head_fcnet_hiddens: []
+    head_fcnet_activation: tanh
+    vf_share_layers: false       # separate value head
+
+runtime:
+  iterations: 20                # smoke first with a small value (e.g. 3), then restore
+  num_env_runners: 4             # 16-thread laptop; leave headroom for learner
+  num_envs_per_env_runner: 1
+  rollout_fragment_length: auto
+  batch_mode: truncate_episodes
+  save_lightweight_bundle: true
+  lightweight_bundle_frequency: 10
+  save_native_checkpoint: true
+  native_checkpoint_frequency: 25
+
+dashboard:
+  enabled: true
+  logdir: artifacts/dashboard
+
+policy_probe:
+  enabled: true
+  interval: 10
+  steps: 4
+  print: false
+
+engagement_log:
+  enabled: true                  # periodic Tacview replays for the Replay tab
+  interval: 25
+  steps: 600
+  episodes: 1
+  print: false
+
+notes: "PPO + tgc26 custom obs + PBRS asymmetric reward + mixed initial geometry vs BT."

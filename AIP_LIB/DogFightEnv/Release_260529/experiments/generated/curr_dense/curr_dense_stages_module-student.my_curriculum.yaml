@@ -1,0 +1,43 @@
+name: team_curriculum_curr_dense_stages_module-student.my_curriculum
+script: train_curriculum
+output:
+  name: team01
+  tag: curr_dense_stages_module-student.my_curriculum
+env:
+  observation_mode: custom
+  observation_module: student.my_observation
+  reward_module: student.my_reward
+  target_behavior_dll: AIP_BASE_target.dll
+curriculum:
+  stages_module: student.my_curriculum
+algo:
+  name: ppo
+  framework: torch
+  lr: 0.0003
+  gamma: 0.997
+  gae_lambda: 0.95
+  clip_param: 0.2
+  train_batch_size: 16384
+  minibatch_size: 512
+  mlp:
+    enabled: true
+    fcnet_hiddens:
+    - 256
+    - 256
+    fcnet_activation: tanh
+    head_fcnet_hiddens: []
+    head_fcnet_activation: tanh
+    vf_share_layers: false
+runtime:
+  num_env_runners: 3
+  resume: false
+policy_probe:
+  enabled: false
+engagement_log:
+  enabled: true
+  interval: 25
+  steps: 600
+  episodes: 1
+  print: false
+notes: 'Curriculum: dense pursuit anneal + WEZ 8->5->3->2 deg schedule, PBRS always
+  on, PPO tgc26.'

@@ -1,0 +1,61 @@
+{
+  "created": "2026-06-20T08:53:18+09:00",
+  "candidate": "codex_ic_s4_mixed_anchor_guard_v1",
+  "status": "frozen_stabilization_candidate",
+  "source_bundle": "AIP_LIB/DogFightEnv/Release_260529/artifacts/models/team01/codex_ic_s4_mixed_anchor_guard_v1",
+  "frozen_bundle": "AIP_LIB/DogFightEnv/Release_260529/artifacts/models/team01/codex_freeze_ic_s4_mixed_anchor_guard_v1_20260620_0853",
+  "source_checkpoint": "AIP_LIB/DogFightEnv/Release_260529/artifacts/models/team01/ic_s3_bt_v1",
+  "training_plan": "reports/codex_loop_plan_20260620_081800_codex_ic_s4_mixed_anchor_guard_v1.md",
+  "training_summary": "reports/codex_result_summary_20260620_083921_codex_ic_s4_mixed_anchor_guard_v1.md",
+  "validation_plan": "reports/codex_loop_plan_20260620_083921_codex_ic_s4_mixed_anchor_guard_validation_v1.md",
+  "validation_summary": "reports/codex_result_summary_20260620_085318_codex_ic_s4_mixed_anchor_guard_validation_v1.md",
+  "experiment_yaml": "AIP_LIB/DogFightEnv/Release_260529/experiments/codex_ic_s4_mixed_anchor_guard_v1.yaml",
+  "experiment_yaml_sha256": "52632DDCFC99F00BEDA25DB041AE87524E5901DE0CA8341D3CFAA6571A167F7E",
+  "policy_weights_sha256": "A9E3C4AF9545495AF8586C59D27074668CAB563AD2C6EABE1DCDFDD011466C8C",
+  "validation_gates": {
+    "bt_win_min": 0.9,
+    "autopilot_win_min": 0.9,
+    "autopilot_loss_crash_max": 0.05,
+    "loiter_win_min": 0.5,
+    "loiter_draw_max": 0.4,
+    "loiter_loss_crash_max": 0.05
+  },
+  "validation_results": {
+    "bt": {
+      "episodes": 30,
+      "win_rate": 0.9,
+      "loss_rate": 0.1,
+      "draw_rate": 0.0,
+      "end_conditions": {
+        "target altitude below min": 27,
+        "ownship altitude below min": 3
+      }
+    },
+    "autopilot": {
+      "episodes": 20,
+      "win_rate": 0.95,
+      "loss_rate": 0.0,
+      "draw_rate": 0.05,
+      "end_conditions": {
+        "target altitude below min": 19,
+        "max time out": 1
+      }
+    },
+    "loiter": {
+      "episodes": 30,
+      "win_rate": 0.8333333333333334,
+      "loss_rate": 0.03333333333333333,
+      "draw_rate": 0.13333333333333333,
+      "end_conditions": {
+        "target altitude below min": 25,
+        "ownship altitude below min": 1,
+        "max time out": 4
+      }
+    }
+  },
+  "caveats": [
+    "BT passed exactly at the minimum 0.90 win gate and still had 3/30 ownship-altitude losses.",
+    "Training tail was borderline: last-5 average crash was 0.3661 and final crash was 0.3056.",
+    "Promote only as a stabilization candidate; run confirmatory validation before replacing a champion in a final pipeline."
+  ]
+}

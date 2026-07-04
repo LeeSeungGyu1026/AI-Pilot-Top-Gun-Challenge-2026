@@ -1,0 +1,19 @@
+# Tiny 2-run sweep used to verify parallel launch + dashboard display.
+#   python scripts\run_parallel.py experiments\sweeps\verify_dashboard_sweep.yaml
+
+name: verify_dash
+base: experiments/team_ppo_mlp.yaml
+max_parallel: 2
+repeats: 1
+
+overrides:
+  runtime.iterations: 2
+  runtime.num_env_runners: 2
+  runtime.save_native_checkpoint: false
+  runtime.native_checkpoint_frequency: 0
+  engagement_log.enabled: true     # so the Replay tab has data too
+  engagement_log.interval: 1
+  policy_probe.enabled: false
+
+grid:
+  env_config.reward.pbrs_ata_weight: [1.0, 2.0]

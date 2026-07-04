@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Pilot Top Gun Training Progress</title>
+  <style>
+    :root {
+      --bg: #f6f7f2;
+      --ink: #1f2a2e;
+      --muted: #68747a;
+      --line: #d9dfd8;
+      --panel: #ffffff;
+      --blue: #2f6f9f;
+      --green: #2e7d55;
+      --red: #bd4b4b;
+      --amber: #b8791f;
+      --teal: #2a7f79;
+      --shadow: 0 12px 28px rgba(25, 36, 38, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font-family: Arial, "Malgun Gothic", sans-serif;
+      letter-spacing: 0;
+    }
+    main { width: min(1240px, calc(100% - 32px)); margin: 0 auto; padding: 28px 0 42px; }
+    header {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.8fr);
+      gap: 20px;
+      align-items: end;
+      padding: 20px 0 18px;
+      border-bottom: 1px solid var(--line);
+    }
+    h1 { margin: 0; font-size: clamp(28px, 4vw, 48px); line-height: 1.05; }
+    h2 { margin: 0 0 14px; font-size: 22px; }
+    h3 { margin: 0 0 8px; font-size: 17px; }
+    p { margin: 0; color: var(--muted); line-height: 1.55; }
+    .stamp { text-align: right; color: var(--muted); font-size: 14px; line-height: 1.6; }
+    .grid { display: grid; gap: 18px; }
+    .cards { grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 20px 0; }
+    .card, .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+    .card { padding: 16px; min-height: 112px; }
+    .label { color: var(--muted); font-size: 13px; }
+    .value { margin-top: 8px; font-size: 30px; font-weight: 700; line-height: 1.05; }
+    .sub { margin-top: 8px; color: var(--muted); font-size: 13px; line-height: 1.45; }
+    .panel { padding: 18px; }
+    .two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .wide { grid-column: 1 / -1; }
+    canvas.chart { width: 100%; height: 280px; display: block; }
+    .timeline {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .stage {
+      border-left: 4px solid var(--blue);
+      background: #f9faf7;
+      padding: 12px;
+      min-height: 132px;
+      border-radius: 6px;
+    }
+    .stage:nth-child(2) { border-color: var(--red); }
+    .stage:nth-child(3) { border-color: var(--green); }
+    .stage:nth-child(4) { border-color: var(--amber); }
+    .stage:nth-child(5) { border-color: var(--teal); }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { padding: 10px 8px; border-bottom: 1px solid var(--line); text-align: right; }
+    th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
+    th { color: var(--muted); font-weight: 600; }
+    .media-grid { grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); align-items: start; }
+    video {
+      width: 100%;
+      display: block;
+      border-radius: 8px;
+      background: #111;
+      border: 1px solid var(--line);
+    }
+    .replay-wrap {
+      position: relative;
+      min-height: 360px;
+      background: #101820;
+      border: 1px solid #20313a;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    #replayCanvas { width: 100%; height: 360px; display: block; }
+    .replay-readout {
+      position: absolute;
+      left: 12px;
+      bottom: 12px;
+      right: 12px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      color: #eaf2ef;
+      font-size: 13px;
+      background: rgba(16, 24, 32, 0.72);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 6px;
+      padding: 8px 10px;
+    }
+    .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; color: var(--muted); font-size: 13px; }
+    .swatch { width: 12px; height: 12px; border-radius: 50%; display: inline-block; margin-right: 6px; vertical-align: -1px; }
+    .note { margin-top: 10px; font-size: 13px; color: var(--muted); }
+    @media (max-width: 900px) {
+      header, .two, .media-grid { grid-template-columns: 1fr; }
+      .stamp { text-align: left; }
+      .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .timeline { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 560px) {
+      main { width: min(100% - 20px, 1240px); padding-top: 18px; }
+      .cards { grid-template-columns: 1fr; }
+      table { font-size: 12px; }
+      th, td { padding: 8px 5px; }
+      .value { font-size: 26px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>AI Pilot Top Gun 훈련 진행 리포트</h1>
+        <p>JSBSim 기반 F-16 1v1 gun-only dogfight에서 PPO 정책을 학습한 현재까지의 맥락, 주요 실험, 결과 지표를 한 화면에 정리했습니다.</p>
+      </div>
+      <div class="stamp">
+        생성 시각: 2026-06-19 13:36<br>
+        데이터: AIP_LIB/DogFightEnv/Release_260529/artifacts/logs/team01
+      </div>
+    </header>
+
+    <section class="grid cards">
+      <div class="card">
+        <div class="label">현재 대표 실험</div>
+        <div class="value">ic_s3_bt_v1</div>
+        <div class="sub">최근 BT 재도입 실험</div>
+      </div>
+      <div class="card">
+        <div class="label">최근 10 iter 승률</div>
+        <div class="value">100%</div>
+        <div class="sub">마지막 iter 기준 100%</div>
+      </div>
+      <div class="card">
+        <div class="label">최근 10 iter 추락률</div>
+        <div class="value">0%</div>
+        <div class="sub">action slew limiter 이후 FDM blow-up 억제</div>
+      </div>
+      <div class="card">
+        <div class="label">최근 10 iter WEZ 접촉</div>
+        <div class="value">62.0</div>
+        <div class="sub">평균 최소거리 680 m</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>프로젝트 맥락</h2>
+      <p>목표는 F-16을 조종하는 강화학습 정책이 1v1 근접 공중전에서 상대를 gun WEZ 안에 유지해 격추하는 것입니다. 환경은 JSBSim flight dynamics와 RLlib 2.54/PyTorch PPO를 사용하며, 최종 평가지표는 Unreal 서버에서의 승률입니다. 관측은 각도 sin/cos, 거리, closure/LOS rate, 에너지, lead-angle error, WEZ flag를 포함하고, 보상은 pursuit PBRS, dense pursuit, damage, 안전/종료 항목으로 구성됩니다.</p>
+      <div class="timeline">
+        <div class="stage">
+          <h3>1. Flat run</h3>
+          <p>비행 안정성은 얻었지만 1.2-1.6 km에서 맴돌며 WEZ 진입과 승리가 거의 없었습니다.</p>
+        </div>
+        <div class="stage">
+          <h3>2. Stage-0 failure</h3>
+          <p>생존 전용 stage가 고도 패널티 때문에 빠른 추락을 유리하게 만들어 crash-fast attractor가 발생했습니다.</p>
+        </div>
+        <div class="stage">
+          <h3>3. Reward repair</h3>
+          <p>Altitude PBRS, 항상 켜진 pursuit shaping, 첫 WEZ 보너스, draw/loss 패널티, action slew limiter로 안정 비행을 회복했습니다.</p>
+        </div>
+        <div class="stage">
+          <h3>4. Contact bootstrap</h3>
+          <p>근접 saddle/offensive start와 cone/level/finish 실험으로 첫 WEZ 접촉과 target destroyed 경험을 만들었습니다.</p>
+        </div>
+        <div class="stage">
+          <h3>5. Generalization</h3>
+          <p>950-1450 m 분리거리, range discipline, weave, BT 재도입을 거쳐 현재 BT 상대 승률이 안정화되었습니다.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid two" style="margin-top:18px;">
+      <div class="panel">
+        <h2>BT 재도입 학습 곡선</h2>
+        <canvas id="btChart" class="chart"></canvas>
+        <div class="legend">
+          <span><i class="swatch" style="background:var(--green)"></i>Win rate</span>
+          <span><i class="swatch" style="background:var(--red)"></i>Loss rate</span>
+          <span><i class="swatch" style="background:var(--blue)"></i>Crash rate</span>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>교전 품질 지표</h2>
+        <canvas id="engagementChart" class="chart"></canvas>
+        <div class="legend">
+          <span><i class="swatch" style="background:var(--amber)"></i>WEZ steps</span>
+          <span><i class="swatch" style="background:var(--teal)"></i>Min distance</span>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>분리거리 curriculum 결과</h2>
+        <canvas id="sepChart" class="chart"></canvas>
+        <div class="note">각 거리는 같은 prefix에서 가장 최근 버전을 사용했고, 값은 최근 10 iter 평균입니다.</div>
+      </div>
+      <div class="panel">
+        <h2>실험 진행별 최종 성능</h2>
+        <canvas id="progressChart" class="chart"></canvas>
+        <div class="note">대표 실험의 최근 10 iter win rate와 crash rate를 함께 비교합니다.</div>
+      </div>
+    </section>
+
+    <section class="grid media-grid" style="margin-top:18px;">
+      <div class="panel">
+        <h2>Demo Video</h2>
+        <video controls preload="metadata">
+          <source src="../1%EC%9D%BC%EC%B0%A8%20%EA%B0%95%EC%9D%98%20%EC%9E%90%EB%A3%8C/%EA%B2%BD%EC%A7%84%EB%8C%80%ED%9A%8C%EC%97%90%EC%84%9C%20%EC%82%AC%EC%9A%A9%ED%95%A0%20%EA%B5%90%EC%A0%84%ED%99%98%EA%B2%BD.mp4" type="video/mp4">
+        </video>
+        <p class="note">프로젝트에 포함된 대회 교전환경 reference video입니다. 훈련 로그 기반 실제 궤적 데모는 오른쪽 캔버스에서 재생됩니다.</p>
+      </div>
+      <div class="panel">
+        <h2>훈련 리플레이 데모</h2>
+        <div class="replay-wrap">
+          <canvas id="replayCanvas"></canvas>
+          <div class="replay-readout">
+            <span id="replayTime">t=0.0s</span>
+            <span id="replayDist">distance=-</span>
+            <span id="replayHealth">target health=-</span>
+          </div>
+        </div>
+        <p class="note">대표 리플레이: ic_s3_bt_v1, iter 90, target destroyed</p>
+      </div>
+    </section>
+
+    <section class="grid two" style="margin-top:18px;">
+      <div class="panel wide">
+        <h2>대표 실험 요약</h2>
+        <table>
+          <thead>
+            <tr><th>Run</th><th>Last iter</th><th>Win</th><th>Crash</th><th>WEZ steps</th><th>Min distance</th><th>Reward</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>ppo_tgc26_pbrs_v1</td><td>49</td><td>0%</td><td>13%</td><td>0.0</td><td>1,129 m</td><td>-152.0</td></tr><tr><td>ppo_tgc26_close_v2</td><td>49</td><td>0%</td><td>6%</td><td>0.0</td><td>1,153 m</td><td>-158.5</td></tr><tr><td>saddle_test_v1</td><td>19</td><td>7%</td><td>4%</td><td>5.9</td><td>93 m</td><td>160.9</td></tr><tr><td>saddle_level_v6</td><td>49</td><td>25%</td><td>0%</td><td>8.5</td><td>176 m</td><td>-39.8</td></tr><tr><td>ic_s2_level_v7</td><td>99</td><td>11%</td><td>3%</td><td>11.4</td><td>347 m</td><td>-86.8</td></tr><tr><td>ic_s2_cone5_v1</td><td>99</td><td>0%</td><td>0%</td><td>5.8</td><td>486 m</td><td>-129.2</td></tr><tr><td>ic_s2_finish_v1</td><td>99</td><td>8%</td><td>1%</td><td>10.1</td><td>448 m</td><td>-102.1</td></tr><tr><td>ic_s2_rangedisc_v2</td><td>99</td><td>100%</td><td>0%</td><td>25.1</td><td>482 m</td><td>191.9</td></tr><tr><td>ic_s2_weave_v3</td><td>99</td><td>33%</td><td>0%</td><td>15.4</td><td>222 m</td><td>-33.2</td></tr><tr><td>ic_s2_sep950_v1</td><td>99</td><td>95%</td><td>0%</td><td>29.6</td><td>464 m</td><td>179.7</td></tr><tr><td>ic_s2_sep1150_v2</td><td>99</td><td>98%</td><td>0%</td><td>49.7</td><td>602 m</td><td>189.4</td></tr><tr><td>ic_s2_sep1250_v1</td><td>99</td><td>100%</td><td>0%</td><td>55.8</td><td>646 m</td><td>194.8</td></tr><tr><td>ic_s2_sep1350_v1</td><td>99</td><td>93%</td><td>0%</td><td>35.2</td><td>559 m</td><td>171.3</td></tr><tr><td>ic_s2_sep1450_v1</td><td>99</td><td>94%</td><td>0%</td><td>43.1</td><td>548 m</td><td>176.5</td></tr><tr><td>ic_s3_bt_v1</td><td>99</td><td>100%</td><td>0%</td><td>62.0</td><td>680 m</td><td>196.3</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel wide">
+        <h2>분리거리 sweep</h2>
+        <table>
+          <thead>
+            <tr><th>Separation</th><th>Run</th><th>Win</th><th>Min distance</th><th>WEZ steps</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>950 m</td><td>ic_s2_sep950_v1</td><td>95%</td><td>464 m</td><td>29.6</td></tr><tr><td>1050 m</td><td>ic_s2_sep1050_v1</td><td>95%</td><td>489 m</td><td>33.5</td></tr><tr><td>1100 m</td><td>ic_s2_sep1100_v1</td><td>5%</td><td>298 m</td><td>15.2</td></tr><tr><td>1150 m</td><td>ic_s2_sep1150_v2</td><td>98%</td><td>602 m</td><td>49.7</td></tr><tr><td>1250 m</td><td>ic_s2_sep1250_v1</td><td>100%</td><td>646 m</td><td>55.8</td></tr><tr><td>1350 m</td><td>ic_s2_sep1350_v1</td><td>93%</td><td>559 m</td><td>35.2</td></tr><tr><td>1450 m</td><td>ic_s2_sep1450_v1</td><td>94%</td><td>548 m</td><td>43.1</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script id="report-data" type="application/json">{"current":{"name":"ic_s3_bt_v1","modified":1781838229.5794804,"modified_iso":"2026-06-19T12:03:49","rows":100,"last_iter":99.0,"last_steps":1638400.0,"final":{"reward_mean":196.25649892246176,"win_rate":1.0,"loss_rate":0.0,"timeout_rate":0.0,"crash_rate":0.0,"ep_wez_steps":63.17978014960774,"ep_min_distance":681.638596893443,"ep_mean_distance":947.5661289618606,"ep_len_mean":146.12},"tail10":{"reward_mean":196.3170923521586,"win_rate":1.0,"loss_rate":0.0,"timeout_rate":0.0,"crash_rate":0.0,"ep_wez_steps":61.95309799236524,"ep_min_distance":679.712427283635,"ep_mean_distance":945.5007427933803,"ep_len_mean":147.793}},"key_runs":[{"name":"ppo_tgc26_pbrs_v1","modified":1781251023.486048,"modified_iso":"2026-06-12T16:57:03","rows":50,"last_iter":49.0,"last_steps":819200.0,"final":{"reward_mean":-133.9666621507702,"win_rate":0.0,"loss_rate":0.0,"timeout_rate":0.2916666666666667,"crash_rate":0.09166666666666667,"ep_wez_steps":0.0,"ep_min_distance":1078.1778691026157,"ep_mean_distance":14596.7231522845,"ep_len_mean":1325.8916666666667},"tail10":{"reward_mean":-152.01781831522425,"win_rate":0.0,"loss_rate":0.0,"timeout_rate":0.29874999999999996,"crash_rate":0.12791666666666665,"ep_wez_steps":0.0,"ep_min_distance":1128.5675812924503,"ep_mean_distance":16174.55528692099,"ep_len_mean":1565.2325}},{"name":"ppo_tgc26_close_v2","modified":1781694925.98258,"modified_iso":"2026-06-17T20:15:25","rows":50,"last_iter":49.0,"last_steps":819200.0,"final":{"reward_mean":-150.59860538676796,"win_rate":0.0,"loss_rate":0.0,"timeout_rate":0.47916666666666663,"crash_rate":0.08333333333333333,"ep_wez_steps":0.0,"ep_min_distance":1328.5250972310932,"ep_mean_distance":9715.743540008314,"ep_len_mean":1721.2708333333333},"tail10":{"reward_mean":-158.4724364838256,"win_rate":0.0,"loss_rate":0.0,"timeout_rate":0.3983333333333333,"crash_rate":0.06333333333333332,"ep_wez_steps":0.01875,"ep_min_distance":1153.0678713435805,"ep_mean_distance":15273.415238282812,"ep_len_mean":1667.5625}},{"name":"saddle_test_v1","modified":1781700810.6068444,"modified_iso":"2026-06-17T21:53:30","rows":20,"last_iter":19.0,"last_steps":327680.0,"final":{"reward_mean":144.25078358198624,"win_rate":0.06923076923076923,"loss_rate":0.0,"timeout_rate":0.0,"crash_rate":0.09839743589743588,"ep_wez_steps":6.085897435897436,"ep_min_distance":87.88544106301049,"ep_mean_distance":1863.7843003550418,"ep_len_mean":322.19775641025643},"tail10":{"reward_mean":160.87944215314485,"win_rate":0.06657051282051282,"loss_rate":0.0,"timeout_rate":0.0,"crash_rate":0.041071844821844825,"ep_wez_steps":5.90313061938062,"ep_min_distance":92.84798368238259,"ep_mean_distance":1853.6216897881745,"ep_len_mean":323.3394896769897}},{"name":"saddle_level_v6","modified":1781720875.316256,"modified_iso":"2026-06-18T03:27:55","rows":50,"last_iter":49.0,"last_steps":819200.0,"final":{"reward_mean":-27.223197067860795,"win_rate":0.29135101010101006,"loss_rate":0.022727272727272728,"timeout_rate":0.6859217171717171,"crash_rate":0.0,"ep_wez_steps":9.219381313131315,"ep_min_distance":202.16423570810878,"ep_mean_distance":1042.466686406769,"ep_len_mean":418.5454545454545},"tail10":{"reward_mean":-39.781994626225035,"win_rate":0.2508479020979021,"loss_rate":0.005397727272727273,"timeout_rate":0.7437543706293706,"crash_rate":0.0,"ep_wez_steps":8.477686133311135,"ep_min_distance":176.47239516622295,"ep_mean_distance":1054.811673200012,"ep_len_mean":450.302077991453}},{"name":"ic_s2_level_v7","modified":1781751506.3063517,"modified_iso":"2026-06-18T11:58:26","rows":100,"last_iter":99.0,"last_steps":1638400.0,"final":{"reward_mean":-52.28653753212023,"win_rate":0.22916666666666666,"loss_rate":0.0,"timeout_rate":0.7708333333333334,"crash_rate":0.0,"ep_wez_steps":11.21875,"ep_min_distance":351.5631975197845,"ep_mean_distance":2066.926641831526,"ep_len_mean":699.8125},"tail10":{"reward_mean":-86.8229447034449,"win_rate":0.11386904761904762,"loss_rate":0.0,"timeout_rate":0.8600595238095238,"crash_rate":0.026071428571428572,"ep_wez_steps":11.35032738095238,"ep_min_distance":347.3183369266295,"ep_mean_distance":1964.1809941014412,"ep_len_mean":797.8372023809524}},{"name":"ic_s2_cone5_v1","modified":1781754936.7145548,"modified_iso":"2026-06-18T12:55:36","rows":100,"last_iter":99.0,"last_steps":1638400.0,"final":{"reward_mean":-129.14104651959616,"win_rate":0.0,"loss_rate":0.0,"timeout_rate":1.0,"crash_rate":0.0,"ep_wez_steps":5.1125,"ep_min_distance":466.0446576833108,"ep_mean_distance":5394.586819357604,"ep_len_mean":900.0},"tail10":{"reward_mean":-129.19201875240898,"win_rate":0.0,"loss_rate":0.0,"timeout_rate":1.0,"crash_rate":0.0,"ep_wez_steps":5.76,"ep_min_distance":486.3280876784186,"ep_mean_distance":5054.9943593212265,"ep_len_mean":900.0}},{"name":"ic_s2_finish_v1","modified":1781758654.900397,"modified_iso":"2026-06-18T13:57:34","rows":100,"last_iter":99.0,"last_steps":1638400.0,"final":{"reward_mean":-126.85872378823902,"win_rate":0.0,"loss_rate":0.0,"timeout_rate":1.0,"crash_rate":0.0,"ep_wez_steps":9.7625,"ep_min_distance":434.22598858821345,"ep_mean_distance":3464.614417078525,"ep_len_mean":900.0},"tail10":{"reward_mean":-102.13373800414517,"win_rate":0.07738095238095238,"loss_rate":0.0,"timeout_rate":0.9126190476190477,"crash_rate":0.01,"ep_wez_steps":10.147678571428571,"ep_min_distance":448.32025262272737,"ep_mean_distance":3120.2491165891925,"ep_len_mean":832.2172619047618}},{"name":"ic_s2_rangedisc_v2","modified":1781778247.3175147,"modified_iso":"2026-06-18T19:24:07","rows":100,"last_iter":99.0,"last_steps":1638400.0,"final":{"reward_mean":193.024114630574,"win_rate":0.9931390977443609,"loss_rate":0.006860902255639097,"timeout_rate":0.0,"crash_rate":0.0,"ep_wez_steps":24.583670620682067,"ep_min_distance":479.7055532359773,"ep_mean_distance":563.3647199992096,"ep_len_mean":45.15},"tail10":{"reward_mean":191.87788944410698,"win_rate":0.9961282220283592,"loss_rate":0.003871777971640876,"timeout_rate":0.0,"crash_rate":0.0,"ep_wez_steps":25.08826933086514,"ep_min_distance":481.7951010675797,"ep_mean_distance":567.6137318644339,"ep_len_mean":49.464999999999996}},{"name":"ic_s2_weave_v3","modified":1781805402.516917,"modified_iso":"2026-06-19T02:56:42","rows":100,"last_iter":99.0,"last_steps":1638400.0,"final":{"reward_mean":-76.79138638466925,"win_rate":0.19642857142857142,"loss_rate":0.13988095238095238,"timeout_rate":0.6636904761904762,"crash_rate":0.0,"ep_wez_steps":14.184523809523808,"ep_min_distance":156.3098136375929,"ep_mean_distance":994.8183729016804,"ep_len_mean":723.1904761904761},"tail10":{"reward_mean":-33.24306696353205,"win_rate":0.3261670274170274,"loss_rate":0.1286562049062049,"timeout_rate":0.5451767676767677,"crash_rate":0.0,"ep_wez_steps":15.41303300865801,"ep_min_distance":222.28997779266942,"ep_mean_distance":898.1554810524771,"ep_len_mean":604.7488762626263}},{"name":"ic_s2_sep950_v1","modified":1781812477.4166791,"modified_iso":"2026-06-19T04:54:37","rows":100,"last_iter":99.0,"last_steps":1638400.0,"final":{"reward_mean":181.91243467092585,"win_rate":0.9600329715219422,"loss_rate":0.03996702847805789,"timeout_rate":0.0,"crash_rate":0.0,"ep_wez_steps":31.04979283380019,"ep_min_distance":467.68300542705055,"ep_mean_distance":629.4121911306415,"ep_len_mean":122.76},"tail10":{"reward_mean":179.73013096872668,"win_rate":0.9522461138745142,"loss_rate":0.04161346248980602,"timeout_rate":0.006140423635679802,"crash_rate":0.0,"ep_wez_steps":29.604331408879393,"ep_min_distance":463.59674056410176,"ep_mean_distance":620.3523142269903,"ep_len_mean":120.21501785714285}},{"name":"ic_s2_sep1150_v2","modified":1781822837.3036113,"modified_iso":"2026-06-19T07:47:17","rows":100,"last_iter":99.0,"last_steps":1638400.0,"final":{"reward_mean":191.40820416430753,"win_rate":0.9852941176470589,"loss_rate":0.014705882352941176,"timeout_rate":0.0,"crash_rate":0.0,"ep_wez_steps":50.117414215686274,"ep_min_distance":605.8413091623644,"ep_mean_distance":779.8574437286884,"ep_len_mean":89.38000000000001},"tail10":{"reward_mean":189.35341923631307,"win_rate":0.9842277921263815,"loss_rate":0.014419394020804771,"timeout_rate":0.0013528138528138528,"crash_rate":0.0,"ep_wez_steps":49.673475513250956,"ep_min_distance":602.0531684537151,"ep_mean_distance":778.6339246727921,"ep_len_mean":95.875}},{"name":"ic_s2_sep1250_v1","modified":1781826440.306679,"modified_iso":"2026-06-19T08:47:20","rows":100,"last_iter":99.0,"last_steps":1638400.0,"final":{"reward_mean":194.87280644353447,"win_rate":1.0,"loss_rate":0.0,"timeout_rate":0.0,"crash_rate":0.0,"ep_wez_steps":56.345523835920176,"ep_min_distance":649.6751961598633,"ep_mean_distance":851.4080756880546,"ep_len_mean":98.75},"tail10":{"reward_mean":194.8159914659418,"win_rate":1.0,"loss_rate":0.0,"timeout_rate":0.0,"crash_rate":0.0,"ep_wez_steps":55.78521597609845,"ep_min_distance":646.0796844044572,"ep_mean_distance":845.1918488535072,"ep_len_mean":96.252}},{"name":"ic_s2_sep1350_v1","modified":1781830103.7041216,"modified_iso":"2026-06-19T09:48:23","rows":100,"last_iter":99.0,"last_steps":1638400.0,"final":{"reward_mean":170.6618963193638,"win_rate":0.9313095238095238,"loss_rate":0.06869047619047619,"timeout_rate":0.0,"crash_rate":0.0,"ep_wez_steps":35.184404761904766,"ep_min_distance":552.1416266219447,"ep_mean_distance":875.7806019010071,"ep_len_mean":153.59125},"tail10":{"reward_mean":171.29023434838962,"win_rate":0.9293932052048195,"loss_rate":0.06833406752245316,"timeout_rate":0.0022727272727272726,"crash_rate":0.0,"ep_wez_steps":35.22346562291905,"ep_min_distance":559.1179041625946,"ep_mean_distance":878.1183951492203,"ep_len_mean":154.44383300395256}},{"name":"ic_s2_sep1450_v1","modified":1781833664.5909972,"modified_iso":"2026-06-19T10:47:44","rows":100,"last_iter":99.0,"last_steps":1638400.0,"final":{"reward_mean":185.81941945117666,"win_rate":0.9697617197617198,"loss_rate":0.018874643874643875,"timeout_rate":0.011363636363636364,"crash_rate":0.0,"ep_wez_steps":46.18646335146335,"ep_min_distance":595.554797841201,"ep_mean_distance":920.6593662089184,"ep_len_mean":166.99454545454546},"tail10":{"reward_mean":176.543329177028,"win_rate":0.9393491770763948,"loss_rate":0.04374201793430492,"timeout_rate":0.016908804989300343,"crash_rate":0.0,"ep_wez_steps":43.14662803953324,"ep_min_distance":547.6430690428522,"ep_mean_distance":905.5720483616496,"ep_len_mean":200.01455720224646}},{"name":"ic_s3_bt_v1","modified":1781838229.5794804,"modified_iso":"2026-06-19T12:03:49","rows":100,"last_iter":99.0,"last_steps":1638400.0,"final":{"reward_mean":196.25649892246176,"win_rate":1.0,"loss_rate":0.0,"timeout_rate":0.0,"crash_rate":0.0,"ep_wez_steps":63.17978014960774,"ep_min_distance":681.638596893443,"ep_mean_distance":947.5661289618606,"ep_len_mean":146.12},"tail10":{"reward_mean":196.3170923521586,"win_rate":1.0,"loss_rate":0.0,"timeout_rate":0.0,"crash_rate":0.0,"ep_wez_steps":61.95309799236524,"ep_min_distance":679.712427283635,"ep_mean_distance":945.5007427933803,"ep_len_mean":147.793}}],"separation_runs":[{"name":"ic_s2_sep950_v1","modified":1781812477.4166791,"modified_iso":"2026-06-19T04:54:37","rows":100,"last_iter":99.0,"last_steps":1638400.0,"final":{"reward_mean":181.91243467092585,"win_rate":0.9600329715219422,"loss_rate":0.03996702847805789,"timeout_rate":0.0,"crash_rate":0.0,"ep_wez_steps":31.04979283380019,"ep_min_distance":467.68300542705055,"ep_mean_distance":629.4121911306415,"ep_len_mean":122.76},"tail10":{"reward_mean":179.73013096872668,"win_rate":0.9522461138745142,"loss_rate":0.04161346248980602,"timeout_rate":0.006140423635679802,"crash_rate":0.0,"ep_wez_steps":29.604331408879393,"ep_min_distance":463.59674056410176,"ep_mean_distance":620.3523142269903,"ep_len_mean":120.21501785714285},"separation_m":950},{"name":"ic_s2_sep1050_v1","modified":1781816023.4967651,"modified_iso":"2026-06-19T05:53:43","rows":100,"last_iter":99.0,"last_steps":1638400.0,"final":{"reward_mean":174.9442746247993,"win_rate":0.9415942028985508,"loss_rate":0.058405797101449275,"timeout_rate":0.0,"crash_rate":0.0,"ep_wez_steps":33.4449209486166,"ep_min_distance":502.01749220134354,"ep_mean_distance":690.501173032788,"ep_len_mean":151.98391304347825},"tail10":{"reward_mean":178.25000391003948,"win_rate":0.9466210950276656,"loss_rate":0.046311226840851795,"timeout_rate":0.007067678131482685,"crash_rate":0.0,"ep_wez_steps":33.50187999015583,"ep_min_distance":489.16958237302686,"ep_mean_distance":684.2073436986294,"ep_len_mean":160.60027093505386},"separation_m":1050},{"name":"ic_s2_sep1100_v1","modified":1781808938.5421755,"modified_iso":"2026-06-19T03:55:38","rows":100,"last_iter":99.0,"last_steps":1638400.0,"final":{"reward_mean":-117.76837168024312,"win_rate":0.08333333333333333,"loss_rate":0.23333333333333334,"timeout_rate":0.6833333333333332,"crash_rate":0.0,"ep_wez_steps":18.430555555555557,"ep_min_distance":341.79216956173593,"ep_mean_distance":1056.6142901873745,"ep_len_mean":782.9777777777779},"tail10":{"reward_mean":-130.6891618763192,"win_rate":0.05032738095238095,"loss_rate":0.20532738095238096,"timeout_rate":0.744345238095238,"crash_rate":0.0,"ep_wez_steps":15.239305555555555,"ep_min_distance":298.4643146367452,"ep_mean_distance":1088.9767378066472,"ep_len_mean":829.5968849206349},"separation_m":1100},{"name":"ic_s2_sep1150_v2","modified":1781822837.3036113,"modified_iso":"2026-06-19T07:47:17","rows":100,"last_iter":99.0,"last_steps":1638400.0,"final":{"reward_mean":191.40820416430753,"win_rate":0.9852941176470589,"loss_rate":0.014705882352941176,"timeout_rate":0.0,"crash_rate":0.0,"ep_wez_steps":50.117414215686274,"ep_min_distance":605.8413091623644,"ep_mean_distance":779.8574437286884,"ep_len_mean":89.38000000000001},"tail10":{"reward_mean":189.35341923631307,"win_rate":0.9842277921263815,"loss_rate":0.014419394020804771,"timeout_rate":0.0013528138528138528,"crash_rate":0.0,"ep_wez_steps":49.673475513250956,"ep_min_distance":602.0531684537151,"ep_mean_distance":778.6339246727921,"ep_len_mean":95.875},"separation_m":1150},{"name":"ic_s2_sep1250_v1","modified":1781826440.306679,"modified_iso":"2026-06-19T08:47:20","rows":100,"last_iter":99.0,"last_steps":1638400.0,"final":{"reward_mean":194.87280644353447,"win_rate":1.0,"loss_rate":0.0,"timeout_rate":0.0,"crash_rate":0.0,"ep_wez_steps":56.345523835920176,"ep_min_distance":649.6751961598633,"ep_mean_distance":851.4080756880546,"ep_len_mean":98.75},"tail10":{"reward_mean":194.8159914659418,"win_rate":1.0,"loss_rate":0.0,"timeout_rate":0.0,"crash_rate":0.0,"ep_wez_steps":55.78521597609845,"ep_min_distance":646.0796844044572,"ep_mean_distance":845.1918488535072,"ep_len_mean":96.252},"separation_m":1250},{"name":"ic_s2_sep1350_v1","modified":1781830103.7041216,"modified_iso":"2026-06-19T09:48:23","rows":100,"last_iter":99.0,"last_steps":1638400.0,"final":{"reward_mean":170.6618963193638,"win_rate":0.9313095238095238,"loss_rate":0.06869047619047619,"timeout_rate":0.0,"crash_rate":0.0,"ep_wez_steps":35.184404761904766,"ep_min_distance":552.1416266219447,"ep_mean_distance":875.7806019010071,"ep_len_mean":153.59125},"tail10":{"reward_mean":171.29023434838962,"win_rate":0.9293932052048195,"loss_rate":0.06833406752245316,"timeout_rate":0.0022727272727272726,"crash_rate":0.0,"ep_wez_steps":35.22346562291905,"ep_min_distance":559.1179041625946,"ep_mean_distance":878.1183951492203,"ep_len_mean":154.44383300395256},"separation_m":1350},{"name":"ic_s2_sep1450_v1","modified":1781833664.5909972,"modified_iso":"2026-06-19T10:47:44","rows":100,"last_iter":99.0,"last_steps":1638400.0,"final":{"reward_mean":185.81941945117666,"win_rate":0.9697617197617198,"loss_rate":0.018874643874643875,"timeout_rate":0.011363636363636364,"crash_rate":0.0,"ep_wez_steps":46.18646335146335,"ep_min_distance":595.554797841201,"ep_mean_distance":920.6593662089184,"ep_len_mean":166.99454545454546},"tail10":{"reward_mean":176.543329177028,"win_rate":0.9393491770763948,"loss_rate":0.04374201793430492,"timeout_rate":0.016908804989300343,"crash_rate":0.0,"ep_wez_steps":43.14662803953324,"ep_min_distance":547.6430690428522,"ep_mean_distance":905.5720483616496,"ep_len_mean":200.01455720224646},"separation_m":1450}],"bt_series":[{"iter":0.0,"win_rate":0.0,"loss_rate":1.0,"crash_rate":0.0,"ep_wez_steps":0.0,"ep_min_distance":1099.7556081872872,"reward_mean":-154.30993971331947,"ep_len_mean":234.27593954248366},{"iter":1.0,"win_rate":0.0,"loss_rate":1.0,"crash_rate":0.0,"ep_wez_steps":0.0,"ep_min_distance":1119.8454815614011,"reward_mean":-153.89847099429912,"ep_len_mean":245.2734885620915},{"iter":2.0,"win_rate":0.0,"loss_rate":1.0,"crash_rate":0.0,"ep_wez_steps":0.0,"ep_min_distance":1098.8254595708072,"reward_mean":-154.4133857762185,"ep_len_mean":232.72436683006538},{"iter":3.0,"win_rate":0.0,"loss_rate":1.0,"crash_rate":0.0,"ep_wez_steps":0.0,"ep_min_distance":1113.732997671731,"reward_mean":-154.20270011198787,"ep_len_mean":243.86488970588235},{"iter":4.0,"win_rate":0.0,"loss_rate":1.0,"crash_rate":0.0,"ep_wez_steps":0.0,"ep_min_distance":1103.647868941272,"reward_mean":-154.3344927701185,"ep_len_mean":254.08125},{"iter":5.0,"win_rate":0.0,"loss_rate":1.0,"crash_rate":0.0,"ep_wez_steps":0.0,"ep_min_distance":1093.715832550141,"reward_mean":-154.26329436814734,"ep_len_mean":265.77083333333337},{"iter":6.0,"win_rate":0.0,"loss_rate":1.0,"crash_rate":0.0,"ep_wez_steps":0.3104166666666667,"ep_min_distance":1091.6812071866075,"reward_mean":-153.6852144368624,"ep_len_mean":272.63973214285716},{"iter":7.0,"win_rate":0.0,"loss_rate":1.0,"crash_rate":0.0,"ep_wez_steps":0.0,"ep_min_distance":1078.8044137953314,"reward_mean":-154.4382823325154,"ep_len_mean":289.292032967033},{"iter":8.0,"win_rate":0.0,"loss_rate":1.0,"crash_rate":0.0,"ep_wez_steps":0.0,"ep_min_distance":1089.299645990431,"reward_mean":-153.2524991537544,"ep_len_mean":316.6682692307693},{"iter":9.0,"win_rate":0.0,"loss_rate":1.0,"crash_rate":0.0,"ep_wez_steps":0.0,"ep_min_distance":1105.2053204055221,"reward_mean":-152.8775611894676,"ep_len_mean":327.57852564102564},{"iter":10.0,"win_rate":0.0,"loss_rate":1.0,"crash_rate":0.0,"ep_wez_steps":0.3125,"ep_min_distance":1089.3447642418469,"reward_mean":-152.0619096663943,"ep_len_mean":324.6217948717948},{"iter":11.0,"win_rate":0.0,"loss_rate":1.0,"crash_rate":0.0,"ep_wez_steps":0.0,"ep_min_distance":1120.6331930854224,"reward_mean":-150.68887905914852,"ep_len_mean":345.8125},{"iter":12.0,"win_rate":0.0,"loss_rate":1.0,"crash_rate":0.0,"ep_wez_steps":0.0,"ep_min_distance":1096.8146309037515,"reward_mean":-149.9484134330628,"ep_len_mean":349.9431818181818},{"iter":13.0,"win_rate":0.0,"loss_rate":1.0,"crash_rate":0.0,"ep_wez_steps":0.0,"ep_min_distance":1061.775246480005,"reward_mean":-148.96563052714083,"ep_len_mean":368.0871212121212},{"iter":14.0,"win_rate":0.0,"loss_rate":1.0,"crash_rate":0.0,"ep_wez_steps":2.1,"ep_min_distance":1067.0380850103998,"reward_mean":-147.23004997196165,"ep_len_mean":378.25},{"iter":15.0,"win_rate":0.0,"loss_rate":1.0,"crash_rate":0.0,"ep_wez_steps":0.7944444444444444,"ep_min_distance":1046.5596308221147,"reward_mean":-145.2861785944994,"ep_len_mean":403.9411616161616},{"iter":16.0,"win_rate":0.0,"loss_rate":1.0,"crash_rate":0.0,"ep_wez_steps":0.25,"ep_min_distance":1042.709757005368,"reward_mean":-146.11749152033542,"ep_len_mean":399.28409090909093},{"iter":17.0,"win_rate":0.0,"loss_rate":1.0,"crash_rate":0.0,"ep_wez_steps":0.0,"ep_min_distance":1037.6368547650893,"reward_mean":-146.0916674419317,"ep_len_mean":415.2333333333333},{"iter":18.0,"win_rate":0.0,"loss_rate":1.0,"crash_rate":0.0,"ep_wez_steps":0.525,"ep_min_distance":1000.1610692263167,"reward_mean":-144.10442536857786,"ep_len_mean":439.3777777777778},{"iter":19.0,"win_rate":0.0,"loss_rate":1.0,"crash_rate":0.0,"ep_wez_steps":0.4444444444444444,"ep_min_distance":1057.9973410287532,"reward_mean":-144.53347613648393,"ep_len_mean":440.94444444444446},{"iter":20.0,"win_rate":0.0,"loss_rate":1.0,"crash_rate":0.0,"ep_wez_steps":3.0555555555555554,"ep_min_distance":974.0659277668728,"reward_mean":-140.4135692677324,"ep_len_mean":473.4340277777777},{"iter":21.0,"win_rate":0.0,"loss_rate":1.0,"crash_rate":0.0,"ep_wez_steps":5.055555555555555,"ep_min_distance":990.6720238085935,"reward_mean":-138.06782535030155,"ep_len_mean":473.7638888888889},{"iter":22.0,"win_rate":0.0,"loss_rate":1.0,"crash_rate":0.0,"ep_wez_steps":4.027777777777778,"ep_min_distance":992.4850125250248,"reward_mean":-139.0986900941206,"ep_len_mean":478.75347222222223},{"iter":23.0,"win_rate":0.0,"loss_rate":1.0,"crash_rate":0.0,"ep_wez_steps":8.0625,"ep_min_distance":959.1970427417706,"reward_mean":-133.867121838894,"ep_len_mean":511.71875},{"iter":24.0,"win_rate":0.0,"loss_rate":1.0,"crash_rate":0.0,"ep_wez_steps":10.825892857142858,"ep_min_distance":932.3251012170508,"reward_mean":-130.35821900915812,"ep_len_mean":547.0446428571429},{"iter":25.0,"win_rate":0.0625,"loss_rate":0.9375,"crash_rate":0.0,"ep_wez_steps":11.357142857142858,"ep_min_distance":924.3718607001275,"reward_mean":-110.92603022679523,"ep_len_mean":548.0892857142857},{"iter":26.0,"win_rate":0.09375,"loss_rate":0.90625,"crash_rate":0.0,"ep_wez_steps":26.180059523809522,"ep_min_distance":884.9397703641172,"reward_mean":-91.95182949103453,"ep_len_mean":574.4925595238095},{"iter":27.0,"win_rate":0.07142857142857142,"loss_rate":0.8511904761904762,"crash_rate":0.041666666666666664,"ep_wez_steps":28.505952380952383,"ep_min_distance":880.3930833302564,"reward_mean":-97.23534865961305,"ep_len_mean":628.1369047619047},{"iter":28.0,"win_rate":0.03571428571428571,"loss_rate":0.9642857142857143,"crash_rate":0.0,"ep_wez_steps":25.50714285714286,"ep_min_distance":901.3282903922644,"reward_mean":-110.63585203986187,"ep_len_mean":690.6},{"iter":29.0,"win_rate":0.0,"loss_rate":0.7625,"crash_rate":0.0625,"ep_wez_steps":23.354166666666664,"ep_min_distance":894.4789429052696,"reward_mean":-120.52800903454158,"ep_len_mean":797.9333333333334},{"iter":30.0,"win_rate":0.08333333333333333,"loss_rate":0.3583333333333333,"crash_rate":0.1,"ep_wez_steps":37.266666666666666,"ep_min_distance":883.7368194646118,"reward_mean":-91.14036407968169,"ep_len_mean":796.9083333333333},{"iter":31.0,"win_rate":0.3333333333333333,"loss_rate":0.21666666666666665,"crash_rate":0.09166666666666667,"ep_wez_steps":60.21666666666666,"ep_min_distance":861.707224057041,"reward_mean":-10.723656527684696,"ep_len_mean":631.7833333333334},{"iter":32.0,"win_rate":0.37936507936507935,"loss_rate":0.1988095238095238,"crash_rate":0.06349206349206349,"ep_wez_steps":62.586507936507935,"ep_min_distance":825.9123679878555,"reward_mean":5.479371078245736,"ep_len_mean":626.6099206349206},{"iter":33.0,"win_rate":0.3888888888888889,"loss_rate":0.0992063492063492,"crash_rate":0.09027777777777778,"ep_wez_steps":63.13492063492064,"ep_min_distance":849.9287728421828,"reward_mean":8.220776877841821,"ep_len_mean":628.6656746031746},{"iter":34.0,"win_rate":0.4553571428571428,"loss_rate":0.13839285714285715,"crash_rate":0.09821428571428571,"ep_wez_steps":67.11607142857143,"ep_min_distance":820.1611193417887,"reward_mean":30.66563103459907,"ep_len_mean":563.5044642857142},{"iter":35.0,"win_rate":0.40201465201465203,"loss_rate":0.060897435897435896,"crash_rate":0.05,"ep_wez_steps":65.08086080586081,"ep_min_distance":825.0201424123261,"reward_mean":15.485066388836461,"ep_len_mean":614.3196886446887},{"iter":36.0,"win_rate":0.6133928571428571,"loss_rate":0.025,"crash_rate":0.05625,"ep_wez_steps":64.76071428571429,"ep_min_distance":771.5172598486643,"reward_mean":80.80543008956595,"ep_len_mean":487.0633928571429},{"iter":37.0,"win_rate":0.727014652014652,"loss_rate":0.0,"crash_rate":0.025,"ep_wez_steps":73.24720695970696,"ep_min_distance":770.0556622916272,"reward_mean":114.41189002991132,"ep_len_mean":424.404532967033},{"iter":38.0,"win_rate":0.7343749999999999,"loss_rate":0.08333333333333333,"crash_rate":0.0,"ep_wez_steps":82.49652777777777,"ep_min_distance":733.7953035866768,"reward_mean":122.42218205643314,"ep_len_mean":410.734375},{"iter":39.0,"win_rate":0.8392857142857143,"loss_rate":0.08035714285714285,"crash_rate":0.0,"ep_wez_steps":88.9986169467787,"ep_min_distance":751.7959660209879,"reward_mean":151.96152025555443,"ep_len_mean":331.90295868347334},{"iter":40.0,"win_rate":0.9222537878787879,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":85.8311004784689,"ep_min_distance":757.3167281769139,"reward_mean":176.21470724423907,"ep_len_mean":280.87547846889953},{"iter":41.0,"win_rate":0.944871794871795,"loss_rate":0.016666666666666666,"crash_rate":0.0,"ep_wez_steps":79.15210622710623,"ep_min_distance":741.2921156211239,"reward_mean":182.47649637890825,"ep_len_mean":262.0257326007326},{"iter":42.0,"win_rate":0.9555555555555555,"loss_rate":0.013888888888888888,"crash_rate":0.013888888888888888,"ep_wez_steps":76.26805555555555,"ep_min_distance":737.5383930778432,"reward_mean":184.38583614465293,"ep_len_mean":232.93333333333334},{"iter":43.0,"win_rate":0.9382965686274509,"loss_rate":0.0,"crash_rate":0.04699754901960784,"ep_wez_steps":74.00704656862744,"ep_min_distance":726.3236312327867,"reward_mean":179.69080687012695,"ep_len_mean":262.09791666666666},{"iter":44.0,"win_rate":0.9665178571428572,"loss_rate":0.017857142857142856,"crash_rate":0.0,"ep_wez_steps":77.68725812693498,"ep_min_distance":734.1232912099788,"reward_mean":188.26823282807302,"ep_len_mean":241.72825215612562},{"iter":45.0,"win_rate":0.9432539682539682,"loss_rate":0.03888888888888889,"crash_rate":0.0,"ep_wez_steps":69.9095238095238,"ep_min_distance":717.8096742863207,"reward_mean":180.62063559050588,"ep_len_mean":233.29365079365078},{"iter":46.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":65.50828157349896,"ep_min_distance":711.3005596361844,"reward_mean":197.19580284082042,"ep_len_mean":187.3762939958592},{"iter":47.0,"win_rate":0.9868421052631579,"loss_rate":0.013157894736842105,"crash_rate":0.0,"ep_wez_steps":66.42412850307588,"ep_min_distance":700.4954922695375,"reward_mean":193.44512518187278,"ep_len_mean":190.75269850763272},{"iter":48.0,"win_rate":0.9880952380952381,"loss_rate":0.0,"crash_rate":0.011904761904761904,"ep_wez_steps":60.24959189361363,"ep_min_distance":692.5427848211189,"reward_mean":193.0641156512761,"ep_len_mean":178.17461438923397},{"iter":49.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":61.85630764163373,"ep_min_distance":695.5389819639289,"reward_mean":196.87209702156014,"ep_len_mean":176.69305830039525},{"iter":50.0,"win_rate":0.9875,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":60.235416666666666,"ep_min_distance":695.9490680172277,"reward_mean":192.52828827342137,"ep_len_mean":177.91875},{"iter":51.0,"win_rate":0.9875,"loss_rate":0.0125,"crash_rate":0.0,"ep_wez_steps":61.208333333333336,"ep_min_distance":685.7062370131976,"reward_mean":193.02009701107636,"ep_len_mean":175.74124999999998},{"iter":52.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":62.041296296296295,"ep_min_distance":690.7221374664829,"reward_mean":196.5868522280528,"ep_len_mean":161.2108333333333},{"iter":53.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":63.49999999999999,"ep_min_distance":691.8015521601449,"reward_mean":196.6857136038574,"ep_len_mean":168.01791666666665},{"iter":54.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":65.37740384615385,"ep_min_distance":694.3441563436483,"reward_mean":196.57385462083255,"ep_len_mean":162.02208333333334},{"iter":55.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":65.54858974358974,"ep_min_distance":696.1546097717111,"reward_mean":196.79795563288627,"ep_len_mean":167.035},{"iter":56.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":64.25461538461539,"ep_min_distance":688.6898944325212,"reward_mean":196.71652706998603,"ep_len_mean":163.04},{"iter":57.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":63.398176638176636,"ep_min_distance":687.9688027314589,"reward_mean":196.55950600198534,"ep_len_mean":158.37},{"iter":58.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":63.372850529100525,"ep_min_distance":684.2313711250989,"reward_mean":196.48890130545337,"ep_len_mean":154.37666666666664},{"iter":59.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":62.78311965811966,"ep_min_distance":683.0947882981482,"reward_mean":196.56425350243867,"ep_len_mean":155.89},{"iter":60.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":62.312855107855114,"ep_min_distance":688.2626712162048,"reward_mean":196.3652297811521,"ep_len_mean":154.60999999999999},{"iter":61.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":61.120892857142856,"ep_min_distance":680.7341128492321,"reward_mean":196.55199170993336,"ep_len_mean":157.34333333333333},{"iter":62.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":64.07592592592593,"ep_min_distance":692.4056771963081,"reward_mean":196.4354468948535,"ep_len_mean":155.44},{"iter":63.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":63.73597883597884,"ep_min_distance":686.5382560557327,"reward_mean":196.51059063723926,"ep_len_mean":155.29000000000002},{"iter":64.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":61.39467032967033,"ep_min_distance":682.6772825110478,"reward_mean":196.44822113013734,"ep_len_mean":153.28},{"iter":65.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":61.60363247863248,"ep_min_distance":682.192114586555,"reward_mean":196.41170614174538,"ep_len_mean":153.74},{"iter":66.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":61.33458587708587,"ep_min_distance":675.2588031677693,"reward_mean":196.48754060641545,"ep_len_mean":155.54999999999998},{"iter":67.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":61.19761904761904,"ep_min_distance":677.571907071573,"reward_mean":196.35048887579896,"ep_len_mean":150.66},{"iter":68.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":59.862182995803686,"ep_min_distance":678.1378657150753,"reward_mean":196.23828627740377,"ep_len_mean":146.58},{"iter":69.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":60.19708994708995,"ep_min_distance":673.4900838016443,"reward_mean":196.426152731398,"ep_len_mean":153.29208333333332},{"iter":70.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":57.419973544973544,"ep_min_distance":667.8602638577655,"reward_mean":196.3055816806816,"ep_len_mean":152.27},{"iter":71.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":57.440494505494506,"ep_min_distance":661.6583619998222,"reward_mean":196.58419575877832,"ep_len_mean":158.22999999999996},{"iter":72.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":56.56857142857143,"ep_min_distance":667.6939632583129,"reward_mean":196.23122591420295,"ep_len_mean":148.77},{"iter":73.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":60.96331908831908,"ep_min_distance":677.9457178474069,"reward_mean":196.33403164623883,"ep_len_mean":152.68},{"iter":74.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":60.46460212201592,"ep_min_distance":676.3495126975942,"reward_mean":196.46746737545652,"ep_len_mean":156.73000000000002},{"iter":75.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":59.72232397232398,"ep_min_distance":677.1698749588714,"reward_mean":196.30145325034843,"ep_len_mean":151.02},{"iter":76.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":62.77744708994709,"ep_min_distance":682.7125831659299,"reward_mean":196.3855292835274,"ep_len_mean":151.2},{"iter":77.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":63.310693935693934,"ep_min_distance":688.4767259585858,"reward_mean":196.3521447180262,"ep_len_mean":150.22},{"iter":78.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":63.280092592592595,"ep_min_distance":686.4354187710271,"reward_mean":196.38551258109652,"ep_len_mean":149.07999999999998},{"iter":79.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":61.74351851851851,"ep_min_distance":682.2790826235519,"reward_mean":196.2707819049072,"ep_len_mean":145.17000000000002},{"iter":80.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":62.183601532567046,"ep_min_distance":682.5507703417611,"reward_mean":196.32143274840175,"ep_len_mean":146.67000000000002},{"iter":81.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":62.27962506841817,"ep_min_distance":679.1630224370565,"reward_mean":196.41205281052947,"ep_len_mean":148.49},{"iter":82.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":62.98751017501017,"ep_min_distance":682.1444273289102,"reward_mean":196.42075163223703,"ep_len_mean":150.56},{"iter":83.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":62.43577024827025,"ep_min_distance":683.685894274689,"reward_mean":196.40124458022365,"ep_len_mean":150.33},{"iter":84.0,"win_rate":0.9875,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":63.301785714285714,"ep_min_distance":683.8518013630974,"reward_mean":192.72817251574043,"ep_len_mean":159.1525},{"iter":85.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":59.67688378033206,"ep_min_distance":675.9754706698792,"reward_mean":196.14157538182323,"ep_len_mean":142.09},{"iter":86.0,"win_rate":0.9907407407407407,"loss_rate":0.009259259259259259,"crash_rate":0.0,"ep_wez_steps":62.18732193732194,"ep_min_distance":680.2476776681588,"reward_mean":193.47795503003772,"ep_len_mean":152.3},{"iter":87.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":62.797008547008545,"ep_min_distance":681.8393632974014,"reward_mean":196.44197241395239,"ep_len_mean":153.43},{"iter":88.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":61.27163154533844,"ep_min_distance":676.3630084112494,"reward_mean":196.2520610823591,"ep_len_mean":145.28000000000003},{"iter":89.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":62.78840013753807,"ep_min_distance":680.6601210099977,"reward_mean":196.35645795225363,"ep_len_mean":150.69},{"iter":90.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":58.642857142857146,"ep_min_distance":672.9361705817337,"reward_mean":196.2395561805435,"ep_len_mean":145.43},{"iter":91.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":61.660714285714285,"ep_min_distance":677.0067853741971,"reward_mean":196.37957452423834,"ep_len_mean":149.6},{"iter":92.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":62.06216931216931,"ep_min_distance":678.0766807312284,"reward_mean":196.4144773381712,"ep_len_mean":151.04},{"iter":93.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":61.55897435897436,"ep_min_distance":680.7864924862229,"reward_mean":196.3407549003155,"ep_len_mean":150.10000000000002},{"iter":94.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":61.91809204524722,"ep_min_distance":680.952143487736,"reward_mean":196.2214446890588,"ep_len_mean":145.06},{"iter":95.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":62.48466292647327,"ep_min_distance":681.9178474979981,"reward_mean":196.29776495001263,"ep_len_mean":145.81},{"iter":96.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":63.101749224594045,"ep_min_distance":682.9137069696285,"reward_mean":196.36889764211975,"ep_len_mean":150.3},{"iter":97.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":62.28536079182631,"ep_min_distance":682.3211057784458,"reward_mean":196.21906381366563,"ep_len_mean":145.44},{"iter":98.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":62.63661968618865,"ep_min_distance":678.574743035716,"reward_mean":196.4328905609989,"ep_len_mean":149.03},{"iter":99.0,"win_rate":1.0,"loss_rate":0.0,"crash_rate":0.0,"ep_wez_steps":63.17978014960774,"ep_min_distance":681.638596893443,"reward_mean":196.25649892246176,"ep_len_mean":146.12}],"replay":{"points":[{"t":0.0,"ox":-178.91,"oy":-544.74,"oa":7000.25,"tx":178.91,"ty":544.74,"ta":7000.1,"oh":1.0,"th":1.0,"d":1146.74},{"t":0.0166,"ox":-169.33,"oy":-516.44,"oa":7000.38,"tx":178.91,"ty":569.61,"ta":7000.09,"oh":1.0,"th":1.0,"d":1140.52},{"t":0.0333,"ox":-159.76,"oy":-488.26,"oa":7000.5,"tx":178.91,"ty":594.59,"ta":7000.04,"oh":1.0,"th":1.0,"d":1134.57},{"t":0.05,"ox":-150.19,"oy":-459.96,"oa":7000.49,"tx":178.91,"ty":619.58,"ta":6999.94,"oh":1.0,"th":1.0,"d":1128.58},{"t":0.0666,"ox":-140.61,"oy":-431.55,"oa":7000.34,"tx":178.91,"ty":644.67,"ta":6999.78,"oh":1.0,"th":1.0,"d":1122.65},{"t":0.0833,"ox":-130.95,"oy":-403.14,"oa":7000.06,"tx":178.91,"ty":669.76,"ta":6999.58,"oh":1.0,"th":1.0,"d":1116.75},{"t":0.1,"ox":-121.38,"oy":-374.73,"oa":6999.65,"tx":178.91,"ty":694.85,"ta":6999.32,"oh":1.0,"th":1.0,"d":1110.94},{"t":0.1166,"ox":-111.72,"oy":-346.21,"oa":6999.1,"tx":178.91,"ty":720.06,"ta":6999.0,"oh":1.0,"th":1.0,"d":1105.17},{"t":0.1333,"ox":-102.15,"oy":-317.58,"oa":6998.37,"tx":178.91,"ty":745.37,"ta":6998.64,"oh":1.0,"th":1.0,"d":1099.48},{"t":0.15,"ox":-92.57,"oy":-288.95,"oa":6997.45,"tx":178.91,"ty":770.68,"ta":6998.22,"oh":1.0,"th":1.0,"d":1093.86},{"t":0.1666,"ox":-83.26,"oy":-260.1,"oa":6996.35,"tx":178.91,"ty":796.0,"ta":6997.75,"oh":1.0,"th":1.0,"d":1088.15},{"t":0.1833,"ox":-73.95,"oy":-231.25,"oa":6995.1,"tx":178.91,"ty":821.42,"ta":6997.22,"oh":1.0,"th":1.0,"d":1082.62},{"t":0.2,"ox":-64.91,"oy":-202.29,"oa":6993.75,"tx":178.91,"ty":846.85,"ta":6996.64,"oh":1.0,"th":1.0,"d":1077.09},{"t":0.2166,"ox":-56.03,"oy":-173.11,"oa":6992.36,"tx":178.91,"ty":872.38,"ta":6996.0,"oh":1.0,"th":1.0,"d":1071.56},{"t":0.2333,"ox":-47.34,"oy":-143.92,"oa":6990.97,"tx":178.91,"ty":898.03,"ta":6995.3,"oh":1.0,"th":1.0,"d":1066.23},{"t":0.25,"ox":-38.82,"oy":-114.63,"oa":6989.63,"tx":178.91,"ty":923.56,"ta":6994.55,"oh":1.0,"th":1.0,"d":1060.78},{"t":0.2666,"ox":-30.3,"oy":-85.23,"oa":6988.36,"tx":178.91,"ty":949.32,"ta":6993.75,"oh":1.0,"th":1.0,"d":1055.49},{"t":0.2833,"ox":-21.96,"oy":-55.71,"oa":6987.17,"tx":178.91,"ty":974.96,"ta":6992.88,"oh":1.0,"th":1.0,"d":1050.07},{"t":0.3,"ox":-13.53,"oy":-26.2,"oa":6986.01,"tx":178.91,"ty":1000.83,"ta":6991.96,"oh":1.0,"th":1.0,"d":1044.9},{"t":0.3166,"ox":-5.09,"oy":3.43,"oa":6984.84,"tx":178.91,"ty":1026.58,"ta":6990.98,"oh":1.0,"th":1.0,"d":1039.57},{"t":0.3333,"ox":3.34,"oy":33.05,"oa":6983.59,"tx":178.91,"ty":1052.45,"ta":6989.95,"oh":1.0,"th":1.0,"d":1034.41},{"t":0.35,"ox":11.68,"oy":62.9,"oa":6982.26,"tx":178.91,"ty":1078.43,"ta":6988.85,"oh":1.0,"th":1.0,"d":1029.21},{"t":0.3666,"ox":20.03,"oy":92.63,"oa":6980.79,"tx":178.91,"ty":1104.41,"ta":6987.7,"oh":1.0,"th":1.0,"d":1024.17},{"t":0.3833,"ox":28.28,"oy":122.59,"oa":6979.18,"tx":179.0,"ty":1130.49,"ta":6986.49,"oh":1.0,"th":1.0,"d":1019.11},{"t":0.4,"ox":36.36,"oy":152.55,"oa":6977.42,"tx":179.0,"ty":1156.58,"ta":6985.22,"oh":1.0,"th":1.0,"d":1014.12},{"t":0.4166,"ox":44.27,"oy":182.61,"oa":6975.53,"tx":179.0,"ty":1182.78,"ta":6983.9,"oh":1.0,"th":1.0,"d":1009.2},{"t":0.4333,"ox":51.91,"oy":212.68,"oa":6973.57,"tx":179.0,"ty":1208.98,"ta":6982.51,"oh":1.0,"th":1.0,"d":1004.37},{"t":0.45,"ox":59.2,"oy":242.97,"oa":6971.59,"tx":179.0,"ty":1235.17,"ta":6981.06,"oh":1.0,"th":1.0,"d":999.41},{"t":0.4666,"ox":66.22,"oy":273.37,"oa":6969.6,"tx":179.0,"ty":1261.48,"ta":6979.56,"oh":1.0,"th":1.0,"d":994.53},{"t":0.4833,"ox":73.07,"oy":303.76,"oa":6967.66,"tx":179.0,"ty":1287.9,"ta":6978.0,"oh":1.0,"th":1.0,"d":989.82},{"t":0.5,"ox":79.66,"oy":334.27,"oa":6965.83,"tx":179.0,"ty":1314.32,"ta":6976.37,"oh":1.0,"th":1.0,"d":985.07},{"t":0.5166,"ox":85.98,"oy":364.89,"oa":6964.2,"tx":179.0,"ty":1340.85,"ta":6974.69,"oh":1.0,"th":1.0,"d":980.38},{"t":0.5333,"ox":92.22,"oy":395.51,"oa":6962.72,"tx":179.0,"ty":1367.38,"ta":6972.95,"oh":1.0,"th":1.0,"d":975.73},{"t":0.55,"ox":98.28,"oy":426.24,"oa":6961.34,"tx":179.0,"ty":1393.91,"ta":6971.15,"oh":1.0,"th":1.0,"d":971.03},{"t":0.5666,"ox":104.34,"oy":457.08,"oa":6959.99,"tx":179.0,"ty":1420.66,"ta":6969.29,"oh":1.0,"th":1.0,"d":966.46},{"t":0.5833,"ox":110.4,"oy":487.92,"oa":6958.6,"tx":179.0,"ty":1447.3,"ta":6967.37,"oh":1.0,"th":1.0,"d":961.83},{"t":0.6,"ox":116.37,"oy":518.87,"oa":6957.08,"tx":179.08,"ty":1474.05,"ta":6965.39,"oh":1.0,"th":1.0,"d":957.23},{"t":0.6166,"ox":122.26,"oy":549.94,"oa":6955.4,"tx":179.08,"ty":1500.91,"ta":6963.35,"oh":1.0,"th":1.0,"d":952.67},{"t":0.6333,"ox":127.88,"oy":581.0,"oa":6953.58,"tx":179.08,"ty":1527.77,"ta":6961.25,"oh":1.0,"th":1.0,"d":948.16},{"t":0.65,"ox":133.24,"oy":612.17,"oa":6951.7,"tx":179.08,"ty":1554.75,"ta":6959.09,"oh":1.0,"th":1.0,"d":943.69},{"t":0.6666,"ox":138.42,"oy":643.45,"oa":6949.84,"tx":179.08,"ty":1581.72,"ta":6956.87,"oh":1.0,"th":1.0,"d":939.14},{"t":0.6833,"ox":143.34,"oy":674.85,"oa":6948.04,"tx":179.08,"ty":1608.8,"ta":6954.59,"oh":1.0,"th":1.0,"d":934.64},{"t":0.7,"ox":148.17,"oy":706.24,"oa":6946.35,"tx":179.08,"ty":1635.88,"ta":6952.24,"oh":1.0,"th":1.0,"d":930.16},{"t":0.7166,"ox":152.91,"oy":737.74,"oa":6944.77,"tx":179.08,"ty":1663.07,"ta":6949.84,"oh":1.0,"th":1.0,"d":925.7},{"t":0.7333,"ox":157.65,"oy":769.36,"oa":6943.26,"tx":179.08,"ty":1690.38,"ta":6947.38,"oh":1.0,"th":1.0,"d":921.27},{"t":0.75,"ox":162.4,"oy":800.97,"oa":6941.79,"tx":179.17,"ty":1717.68,"ta":6944.86,"oh":1.0,"th":1.0,"d":916.86},{"t":0.7666,"ox":167.14,"oy":832.7,"oa":6940.27,"tx":179.17,"ty":1744.98,"ta":6942.28,"oh":1.0,"th":1.0,"d":912.37},{"t":0.7833,"ox":171.79,"oy":864.53,"oa":6938.64,"tx":179.17,"ty":1772.4,"ta":6939.64,"oh":1.0,"th":0.9999715253977512,"d":907.89},{"t":0.8,"ox":176.36,"oy":896.37,"oa":6936.86,"tx":179.17,"ty":1799.81,"ta":6936.94,"oh":1.0,"th":0.999496567590171,"d":903.45},{"t":0.8166,"ox":180.66,"oy":928.31,"oa":6934.93,"tx":179.17,"ty":1827.45,"ta":6934.18,"oh":1.0,"th":0.9992088038170108,"d":899.13},{"t":0.8333,"ox":184.88,"oy":960.37,"oa":6932.9,"tx":179.17,"ty":1854.97,"ta":6931.36,"oh":1.0,"th":0.9985982069851754,"d":894.62},{"t":0.85,"ox":188.74,"oy":992.43,"oa":6930.78,"tx":179.17,"ty":1882.61,"ta":6928.47,"oh":1.0,"th":0.9963776551022977,"d":890.23},{"t":0.8666,"ox":192.26,"oy":1024.6,"oa":6928.62,"tx":179.26,"ty":1910.35,"ta":6925.53,"oh":1.0,"th":0.9935717284261185,"d":885.85},{"t":0.8833,"ox":195.51,"oy":1056.87,"oa":6926.47,"tx":179.26,"ty":1938.1,"ta":6922.53,"oh":1.0,"th":0.9901916180924162,"d":881.37},{"t":0.9,"ox":198.58,"oy":1089.15,"oa":6924.34,"tx":179.26,"ty":1965.95,"ta":6919.47,"oh":1.0,"th":0.9862265902767425,"d":877.02},{"t":0.9166,"ox":201.3,"oy":1121.43,"oa":6922.34,"tx":179.26,"ty":1993.92,"ta":6916.35,"oh":1.0,"th":0.9816825493376904,"d":872.77},{"t":0.9333,"ox":203.94,"oy":1153.93,"oa":6920.48,"tx":179.26,"ty":2021.78,"ta":6913.17,"oh":1.0,"th":0.9765677444599155,"d":868.2},{"t":0.95,"ox":206.4,"oy":1186.43,"oa":6918.73,"tx":179.26,"ty":2049.85,"ta":6909.93,"oh":1.0,"th":0.9708735463990481,"d":863.85},{"t":0.9666,"ox":208.86,"oy":1218.92,"oa":6917.02,"tx":179.35,"ty":2077.93,"ta":6906.63,"oh":1.0,"th":0.9645960088379265,"d":859.51},{"t":0.9833,"ox":211.23,"oy":1251.53,"oa":6915.28,"tx":179.35,"ty":2106.01,"ta":6903.28,"oh":1.0,"th":0.9577485010940566,"d":855.07},{"t":1.0,"ox":213.51,"oy":1284.25,"oa":6913.42,"tx":179.35,"ty":2134.2,"ta":6899.86,"oh":1.0,"th":0.950320304451215,"d":850.63},{"t":1.0166,"ox":215.8,"oy":1316.97,"oa":6911.41,"tx":179.35,"ty":2162.49,"ta":6896.38,"oh":1.0,"th":0.9423146792726631,"d":846.31},{"t":1.0333,"ox":217.82,"oy":1349.8,"oa":6909.24,"tx":179.35,"ty":2190.79,"ta":6892.85,"oh":1.0,"th":0.9337369611398956,"d":841.87},{"t":1.05,"ox":219.57,"oy":1382.63,"oa":6906.94,"tx":179.43,"ty":2219.2,"ta":6889.26,"oh":1.0,"th":0.9245817584933415,"d":837.53},{"t":1.0666,"ox":221.15,"oy":1415.58,"oa":6904.6,"tx":179.43,"ty":2247.61,"ta":6885.61,"oh":1.0,"th":0.9148504623307963,"d":833.08},{"t":1.0833,"ox":222.47,"oy":1448.52,"oa":6902.29,"tx":179.43,"ty":2276.13,"ta":6881.9,"oh":1.0,"th":0.9045403420068828,"d":828.73},{"t":1.1,"ox":223.61,"oy":1481.57,"oa":6900.07,"tx":179.43,"ty":2304.65,"ta":6878.14,"oh":1.0,"th":0.8936511144411546,"d":824.27},{"t":1.1166,"ox":224.58,"oy":1514.73,"oa":6897.94,"tx":179.43,"ty":2333.28,"ta":6874.32,"oh":1.0,"th":0.8821852309790943,"d":819.79},{"t":1.1333,"ox":225.46,"oy":1547.89,"oa":6895.89,"tx":179.52,"ty":2362.02,"ta":6870.44,"oh":1.0,"th":0.8701356726495585,"d":815.42},{"t":1.15,"ox":226.42,"oy":1581.16,"oa":6893.83,"tx":179.52,"ty":2390.76,"ta":6866.5,"oh":1.0,"th":0.8575033123411121,"d":810.95},{"t":1.1666,"ox":227.3,"oy":1614.55,"oa":6891.71,"tx":179.52,"ty":2419.5,"ta":6862.51,"oh":1.0,"th":0.8442917473816599,"d":806.37},{"t":1.1833,"ox":228.09,"oy":1647.93,"oa":6889.48,"tx":179.52,"ty":2448.35,"ta":6858.46,"oh":1.0,"th":0.8304989380598821,"d":801.89},{"t":1.2,"ox":228.79,"oy":1681.31,"oa":6887.12,"tx":179.61,"ty":2477.31,"ta":6854.36,"oh":1.0,"th":0.8161223074282388,"d":797.52},{"t":1.2166,"ox":229.41,"oy":1714.81,"oa":6884.63,"tx":179.61,"ty":2506.27,"ta":6850.2,"oh":1.0,"th":0.8011684611948038,"d":793.03},{"t":1.2333,"ox":229.85,"oy":1748.41,"oa":6882.04,"tx":179.61,"ty":2535.35,"ta":6845.98,"oh":1.0,"th":0.7856343377374809,"d":788.54},{"t":1.25,"ox":230.02,"oy":1782.02,"oa":6879.36,"tx":179.61,"ty":2564.42,"ta":6841.71,"oh":1.0,"th":0.7695164544512996,"d":784.02},{"t":1.2666,"ox":230.11,"oy":1815.62,"oa":6876.66,"tx":179.7,"ty":2593.6,"ta":6837.38,"oh":1.0,"th":0.75282082151939,"d":779.61},{"t":1.2833,"ox":229.94,"oy":1849.33,"oa":6873.98,"tx":179.7,"ty":2622.78,"ta":6833.0,"oh":1.0,"th":0.7355465107880665,"d":775.08},{"t":1.3,"ox":229.59,"oy":1883.05,"oa":6871.33,"tx":179.7,"ty":2652.08,"ta":6828.57,"oh":1.0,"th":0.7176911288673066,"d":770.64},{"t":1.3166,"ox":229.15,"oy":1916.87,"oa":6868.72,"tx":179.79,"ty":2681.37,"ta":6824.08,"oh":1.0,"th":0.6992595563179944,"d":766.09},{"t":1.3333,"ox":228.62,"oy":1950.7,"oa":6866.16,"tx":179.79,"ty":2710.77,"ta":6819.53,"oh":1.0,"th":0.6802516086146392,"d":761.64},{"t":1.35,"ox":228.0,"oy":1984.52,"oa":6863.63,"tx":179.79,"ty":2740.29,"ta":6814.94,"oh":1.0,"th":0.6606764686856337,"d":757.3},{"t":1.3666,"ox":227.39,"oy":2018.46,"oa":6861.06,"tx":179.79,"ty":2769.8,"ta":6810.28,"oh":1.0,"th":0.6405348556991687,"d":752.85},{"t":1.3833,"ox":226.69,"oy":2052.51,"oa":6858.4,"tx":179.87,"ty":2799.31,"ta":6805.58,"oh":1.0,"th":0.6198269721282895,"d":748.27},{"t":1.4,"ox":225.98,"oy":2086.55,"oa":6855.64,"tx":179.87,"ty":2828.94,"ta":6800.82,"oh":1.0,"th":0.5985511878123184,"d":743.82},{"t":1.4166,"ox":225.28,"oy":2120.6,"oa":6852.77,"tx":179.87,"ty":2858.67,"ta":6796.01,"oh":1.0,"th":0.5767078879701649,"d":739.47},{"t":1.4333,"ox":224.49,"oy":2154.76,"oa":6849.76,"tx":179.96,"ty":2888.41,"ta":6791.15,"oh":1.0,"th":0.5543038039586801,"d":735.0},{"t":1.45,"ox":223.61,"oy":2188.91,"oa":6846.61,"tx":179.96,"ty":2918.26,"ta":6786.23,"oh":1.0,"th":0.5313385592600164,"d":730.65},{"t":1.4666,"ox":222.65,"oy":2223.07,"oa":6843.36,"tx":179.96,"ty":2948.1,"ta":6781.27,"oh":1.0,"th":0.5078165328518973,"d":726.29},{"t":1.4833,"ox":221.5,"oy":2257.34,"oa":6840.04,"tx":180.05,"ty":2978.06,"ta":6776.25,"oh":1.0,"th":0.48373452833348607,"d":721.91},{"t":1.5,"ox":220.28,"oy":2291.6,"oa":6836.69,"tx":180.05,"ty":3008.01,"ta":6771.18,"oh":1.0,"th":0.4591045166391895,"d":717.54},{"t":1.5166,"ox":218.87,"oy":2325.87,"oa":6833.33,"tx":180.14,"ty":3038.08,"ta":6766.06,"oh":1.0,"th":0.43392472384700914,"d":713.26},{"t":1.5333,"ox":217.46,"oy":2360.25,"oa":6829.93,"tx":180.14,"ty":3068.15,"ta":6760.89,"oh":1.0,"th":0.4081977331999194,"d":708.88},{"t":1.55,"ox":215.97,"oy":2394.63,"oa":6826.49,"tx":180.14,"ty":3098.33,"ta":6755.66,"oh":1.0,"th":0.38193239306199733,"d":704.61},{"t":1.5666,"ox":214.57,"oy":2429.01,"oa":6822.95,"tx":180.23,"ty":3128.61,"ta":6750.39,"oh":1.0,"th":0.3551294039546623,"d":700.45},{"t":1.5833,"ox":213.07,"oy":2463.38,"oa":6819.25,"tx":180.23,"ty":3158.9,"ta":6745.07,"oh":1.0,"th":0.32779836660914075,"d":696.29},{"t":1.6,"ox":211.49,"oy":2497.76,"oa":6815.38,"tx":180.23,"ty":3189.19,"ta":6739.7,"oh":1.0,"th":0.2999461513937213,"d":692.13},{"t":1.6166,"ox":209.91,"oy":2532.03,"oa":6811.34,"tx":180.31,"ty":3219.59,"ta":6734.28,"oh":1.0,"th":0.2715832191133183,"d":688.2},{"t":1.6333,"ox":208.33,"oy":2566.41,"oa":6807.23,"tx":180.31,"ty":3250.1,"ta":6728.81,"oh":1.0,"th":0.24271953638359547,"d":684.26},{"t":1.65,"ox":206.75,"oy":2600.79,"oa":6803.05,"tx":180.4,"ty":3280.61,"ta":6723.29,"oh":1.0,"th":0.21336288945370985,"d":680.33},{"t":1.6666,"ox":205.17,"oy":2635.05,"oa":6798.77,"tx":180.4,"ty":3311.23,"ta":6717.72,"oh":1.0,"th":0.18351386877496473,"d":676.63},{"t":1.6833,"ox":203.5,"oy":2669.43,"oa":6794.38,"tx":180.49,"ty":3341.85,"ta":6712.1,"oh":1.0,"th":0.15319650364992504,"d":672.81},{"t":1.7,"ox":201.74,"oy":2703.7,"oa":6789.89,"tx":180.49,"ty":3372.58,"ta":6706.44,"oh":1.0,"th":0.12241265826661882,"d":669.22},{"t":1.7166,"ox":200.07,"oy":2737.97,"oa":6785.31,"tx":180.58,"ty":3403.31,"ta":6700.73,"oh":1.0,"th":0.0911750357464842,"d":665.63},{"t":1.7333,"ox":198.41,"oy":2772.23,"oa":6780.65,"tx":180.58,"ty":3434.15,"ta":6694.97,"oh":1.0,"th":0.0594934726836521,"d":662.15},{"t":1.75,"ox":196.74,"oy":2806.5,"oa":6775.91,"tx":180.66,"ty":3464.99,"ta":6689.16,"oh":1.0,"th":0.027376003728138587,"d":658.68},{"t":1.7666,"ox":195.07,"oy":2840.66,"oa":6771.12,"tx":180.66,"ty":3495.94,"ta":6683.31,"oh":1.0,"th":-0.00516743623820702,"d":655.44}],"summary":{"run":"ic_s3_bt_v1","iteration":90.0,"outcome":"win","end_condition":"target destroyed","steps":107.0,"total_reward":194.88609040290018,"ep_min_distance":664.6607607195645,"ownship_health":1.0,"target_health":-0.00516743623820702}}}</script>
+  <script>
+    const data = JSON.parse(document.getElementById('report-data').textContent);
+    const css = getComputedStyle(document.documentElement);
+    const colors = {
+      blue: css.getPropertyValue('--blue').trim(),
+      green: css.getPropertyValue('--green').trim(),
+      red: css.getPropertyValue('--red').trim(),
+      amber: css.getPropertyValue('--amber').trim(),
+      teal: css.getPropertyValue('--teal').trim(),
+      muted: css.getPropertyValue('--muted').trim(),
+      line: css.getPropertyValue('--line').trim(),
+      ink: css.getPropertyValue('--ink').trim()
+    };
+
+    function setupCanvas(canvas) {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+      canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+      const ctx = canvas.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      return {ctx, w: rect.width, h: rect.height};
+    }
+
+    function drawAxes(ctx, box, yMin, yMax, yLabel) {
+      ctx.strokeStyle = colors.line;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(box.l, box.t);
+      ctx.lineTo(box.l, box.b);
+      ctx.lineTo(box.r, box.b);
+      ctx.stroke();
+      ctx.fillStyle = colors.muted;
+      ctx.font = '12px Arial';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      for (let i = 0; i <= 4; i++) {
+        const value = yMin + (yMax - yMin) * i / 4;
+        const y = box.b - (box.b - box.t) * i / 4;
+        ctx.strokeStyle = colors.line;
+        ctx.globalAlpha = 0.55;
+        ctx.beginPath();
+        ctx.moveTo(box.l, y);
+        ctx.lineTo(box.r, y);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.fillText(yLabel(value), box.l - 8, y);
+      }
+    }
+
+    function drawLineChart(canvas, series, opts) {
+      const {ctx, w, h} = setupCanvas(canvas);
+      ctx.clearRect(0, 0, w, h);
+      const box = {l: 54, r: w - 18, t: 18, b: h - 34};
+      const xs = series.flatMap(s => s.points.map(p => p.x)).filter(Number.isFinite);
+      const ys = series.flatMap(s => s.points.map(p => p.y)).filter(Number.isFinite);
+      const xMin = Math.min(...xs), xMax = Math.max(...xs);
+      let yMin = opts.yMin ?? Math.min(...ys), yMax = opts.yMax ?? Math.max(...ys);
+      if (!Number.isFinite(yMin) || !Number.isFinite(yMax) || yMin === yMax) { yMin = 0; yMax = 1; }
+      const xScale = x => box.l + (x - xMin) / Math.max(1, xMax - xMin) * (box.r - box.l);
+      const yScale = y => box.b - (y - yMin) / Math.max(1e-9, yMax - yMin) * (box.b - box.t);
+      drawAxes(ctx, box, yMin, yMax, opts.yLabel || (v => v.toFixed(1)));
+      series.forEach(s => {
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        s.points.forEach((p, i) => {
+          const x = xScale(p.x), y = yScale(p.y);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      });
+      ctx.fillStyle = colors.muted;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText('iteration', (box.l + box.r) / 2, box.b + 12);
+    }
+
+    function drawBarChart(canvas, rows, opts) {
+      const {ctx, w, h} = setupCanvas(canvas);
+      ctx.clearRect(0, 0, w, h);
+      const box = {l: 54, r: w - 18, t: 18, b: h - 48};
+      const values = rows.map(r => r.value).filter(Number.isFinite);
+      const yMin = 0;
+      const yMax = opts.yMax ?? Math.max(1, ...values) * 1.1;
+      drawAxes(ctx, box, yMin, yMax, opts.yLabel || (v => v.toFixed(1)));
+      const slot = (box.r - box.l) / Math.max(1, rows.length);
+      const barW = Math.max(16, Math.min(42, slot * 0.56));
+      rows.forEach((row, i) => {
+        const x = box.l + slot * i + slot / 2;
+        const y = box.b - (row.value - yMin) / Math.max(1e-9, yMax - yMin) * (box.b - box.t);
+        ctx.fillStyle = row.color || colors.green;
+        ctx.fillRect(x - barW / 2, y, barW, box.b - y);
+        ctx.fillStyle = colors.ink;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.font = '12px Arial';
+        ctx.fillText(row.label, x, box.b + 10);
+      });
+    }
+
+    function renderCharts() {
+      const bt = data.bt_series.map(row => ({
+        x: row.iter,
+        win_rate: row.win_rate,
+        loss_rate: row.loss_rate,
+        crash_rate: row.crash_rate,
+        ep_wez_steps: row.ep_wez_steps,
+        ep_min_distance: row.ep_min_distance
+      }));
+      drawLineChart(document.getElementById('btChart'), [
+        {color: colors.green, points: bt.map(r => ({x: r.x, y: r.win_rate})).filter(p => p.y != null)},
+        {color: colors.red, points: bt.map(r => ({x: r.x, y: r.loss_rate})).filter(p => p.y != null)},
+        {color: colors.blue, points: bt.map(r => ({x: r.x, y: r.crash_rate})).filter(p => p.y != null)}
+      ], {yMin: 0, yMax: 1, yLabel: v => Math.round(v * 100) + '%'});
+
+      const maxWez = Math.max(...bt.map(r => r.ep_wez_steps || 0), 1);
+      drawLineChart(document.getElementById('engagementChart'), [
+        {color: colors.amber, points: bt.map(r => ({x: r.x, y: r.ep_wez_steps})).filter(p => p.y != null)},
+        {color: colors.teal, points: bt.map(r => ({x: r.x, y: (r.ep_min_distance || 0) / 20})).filter(p => p.y != null)}
+      ], {yMin: 0, yMax: Math.max(maxWez, 70), yLabel: v => v.toFixed(0)});
+
+      drawBarChart(document.getElementById('sepChart'), data.separation_runs.map(run => ({
+        label: String(run.separation_m),
+        value: (run.tail10.win_rate || 0) * 100,
+        color: colors.green
+      })), {yMax: 100, yLabel: v => Math.round(v) + '%'});
+
+      const progressRows = data.key_runs.map(run => ({
+        label: run.name.replace('ic_s2_', '').replace('_v1', '').replace('_v2', '').slice(0, 10),
+        value: (run.tail10.win_rate || 0) * 100,
+        color: (run.tail10.crash_rate || 0) > 0.1 ? colors.red : colors.blue
+      }));
+      drawBarChart(document.getElementById('progressChart'), progressRows, {yMax: 100, yLabel: v => Math.round(v) + '%'});
+    }
+
+    function renderReplay() {
+      const canvas = document.getElementById('replayCanvas');
+      const {ctx, w, h} = setupCanvas(canvas);
+      const points = data.replay.points || [];
+      if (!points.length) return;
+      const pad = 34;
+      const xs = points.flatMap(p => [p.ox, p.tx]);
+      const ys = points.flatMap(p => [p.oy, p.ty]);
+      const xMin = Math.min(...xs), xMax = Math.max(...xs);
+      const yMin = Math.min(...ys), yMax = Math.max(...ys);
+      const scale = Math.min((w - pad * 2) / Math.max(1, xMax - xMin), (h - pad * 2) / Math.max(1, yMax - yMin));
+      const cx = (xMin + xMax) / 2;
+      const cy = (yMin + yMax) / 2;
+      const sx = x => w / 2 + (x - cx) * scale;
+      const sy = y => h / 2 - (y - cy) * scale;
+      let frame = 0;
+      function drawPath(keyX, keyY, color, upto) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let i = 0; i <= upto; i++) {
+          const p = points[i];
+          const x = sx(p[keyX]), y = sy(p[keyY]);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+      function tick() {
+        const p = points[frame];
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = '#101820';
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        ctx.lineWidth = 1;
+        for (let x = 0; x < w; x += 48) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+        for (let y = 0; y < h; y += 48) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+        drawPath('ox', 'oy', '#56a6d6', frame);
+        drawPath('tx', 'ty', '#e07464', frame);
+        ctx.fillStyle = '#56a6d6';
+        ctx.beginPath(); ctx.arc(sx(p.ox), sy(p.oy), 6, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#e07464';
+        ctx.beginPath(); ctx.arc(sx(p.tx), sy(p.ty), 6, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.34)';
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath(); ctx.moveTo(sx(p.ox), sy(p.oy)); ctx.lineTo(sx(p.tx), sy(p.ty)); ctx.stroke();
+        ctx.setLineDash([]);
+        document.getElementById('replayTime').textContent = 't=' + (p.t || 0).toFixed(1) + 's';
+        document.getElementById('replayDist').textContent = 'distance=' + Math.round(p.d) + 'm';
+        document.getElementById('replayHealth').textContent = 'target health=' + (p.th ?? 0).toFixed(2);
+        frame = (frame + 1) % points.length;
+        requestAnimationFrame(() => setTimeout(tick, 38));
+      }
+      tick();
+    }
+
+    renderCharts();
+    renderReplay();
+    window.addEventListener('resize', () => {
+      renderCharts();
+    });
+  </script>
+</body>
+</html>

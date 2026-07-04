@@ -1,0 +1,39 @@
+# Evaluation-only YAML for pre-v12 diagnostics. Do not train from this file.
+#
+# Purpose: test whether the current v11 policy can hold range/aim and kill a
+# straight level target when it starts near the true WEZ band. This isolates
+# gunnery/control from long-range closure and BT evasive discontinuities.
+
+name: codex_pre_v12_inband_autopilot_eval
+script: eval_only
+
+env:
+  observation_mode: custom
+  observation_module: student.my_observation
+  target_mode: autopilot
+  max_engage_time: 90.0
+  episode_step_limit: 2700
+
+env_config:
+  step_ratio: 6
+  observation_size: 26
+  action_slew_limit: 0.25
+  offensive_saddle:
+    enabled: true
+    range_m: [500.0, 700.0]
+    aspect_deg: [0.0, 10.0]
+    altitude_m: 7000.0
+    target_speed_mps: 250.0
+    own_speed_mps: 280.0
+  target_autopilot:
+    heading_cmd: 0.0
+    altitude_cmd: -7000.0
+    speed_cmd: 250.0
+  target_weave:
+    enabled: false
+  wez:
+    angle_deg: 2.0
+    min_range_m: 152.4
+    max_range_m: 914.4
+
+notes: "codex pre-v12 diagnostic only: in-band straight level target sanity gate for v11 bundle."

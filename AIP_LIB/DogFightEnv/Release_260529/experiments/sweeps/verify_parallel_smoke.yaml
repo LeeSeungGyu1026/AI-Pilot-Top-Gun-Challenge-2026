@@ -1,0 +1,13 @@
+# Smoke test for the parallel launcher: 2 tiny SAC runs side by side.
+#   python scripts\run_parallel.py experiments\sweeps\verify_parallel_smoke.yaml
+
+name: verify_parallel
+base: experiments/verify_smoke_sac.yaml
+max_parallel: 2
+repeats: 1
+
+overrides:
+  runtime.iterations: 1
+
+grid:
+  algo.lr: [3.0e-4, 1.0e-3]

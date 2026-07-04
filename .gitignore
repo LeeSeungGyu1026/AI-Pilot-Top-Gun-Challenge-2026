@@ -1,0 +1,26 @@
+.vs/
+**/.vs/
+.claude/
+**/__pycache__/
+*.py[cod]
+*$py.class
+
+# Visual Studio and native build intermediates
+*.obj
+*.ilk
+*.pdb
+*.pch
+*.idb
+*.tlog
+*.lastbuildstate
+*.log
+*.user
+
+# Local experiment/runtime noise
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Live training run outputs (large, constantly changing, not source)
+AIP_LIB/DogFightEnv/*/artifacts/
+*.lock
