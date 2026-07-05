@@ -1,0 +1,180 @@
+# ic_s6 BT curriculum, STAGE 1: pursuit-only BT (no defensive maneuvers).
+#
+# First BT stage with (a) the fixed init_bundle loader (bug #7) so seeding is
+# REAL, and (b) a student-controlled BT difficulty ladder
+# (student/bt_rules/Rule_BT_L1..L4). The June ic_s3_bt line failed because the
+# FULL BT at close rear spawn suicide-dives from tick 0 (forced spawn out to
+# 3600m+, destroying the mastered 500-900m gunnery). L1 removes every
+# defensive/dive task (DefensiveBreak/RearThreatJink/LowYoYo), so the agent
+# can fight a live, TURNING, SHOOTING opponent at the exact geometry it
+# already masters.
+#
+# BEFORE LAUNCH (BT DLL reads the workspace-root rule file):
+#   1. UPDATE init_bundle below to ic_s5_weave5_random_v1's FINAL bundle.
+#   2. copy student\bt_rules\Rule_BT_L1_pursuit_only.xml Rule_forTraining.xml
+#      (stock backup already saved: student\bt_rules\Rule_BT_L4_stock.xml)
+#   3. PROBE: run 3 iterations, then tools\end_condition_breakdown.py on
+#      train.log -- "target altitude below min" must NOT dominate (BT tick-0
+#      suicide dive would mean L1 didn't remove the trigger; abort + diagnose).
+#
+#   python scripts\run_experiment.py experiments\ic_s6_bt1_pursuit_only_v1.yaml
+#
+# Gate to stage 2 (widen band, then L2 gentle defense): training win_rate
+# holds >=0.8 AND run_eval (with --experiment-yaml THIS file AND
+# --bt-rule-xml student/bt_rules/Rule_BT_L1_pursuit_only.xml
+# --target-backend bt) >=0.7 -- the provider-path eval is the HELD-OUT BT
+# control path (2026-06-19 train/eval mismatch lesson: always gate on both).
+
+name: ic_s6_bt1_pursuit_only_v1
+script: train_rllib
+
+output:
+  name: team01
+  tag: ic_s6_bt1_pursuit_only_v3
+
+env:
+  observation_mode: custom
+  observation_module: student.my_observation
+  reward_module: student.codex_reward_v15_wez_only
+  target_mode: behavior_tree
+  target_behavior_dll: AIP_BASE_target.dll
+  max_engage_time: 120.0            # BT turns into us; kills take longer than vs autopilot
+  episode_step_limit: 3600
+
+env_config:
+  step_ratio: 6
+  observation_size: 26
+  action_slew_limit: 0.25
+  offensive_saddle:
+    enabled: true
+    # v3 CRITICAL CHANGE: spawn moved OUT to 3600-4200m. Replay autopsy of v2
+    # (iter20, target CSV) proved the rear-saddle spawn is incompatible with a
+    # REACTIVE BT even after the L1 nerf: with the agent locked on its six at
+    # 500-900m the BT attempts a ~180deg reversal, rolls inverted (roll 125-166),
+    # pulls into a sustained near-vertical dive (pitch -58 by step60, -88 by
+    # step100) and rides 7000m into the ground by step 244 at 97% health --
+    # ownship untouched. That is the June v4 close-range heading-reversal
+    # pathology; L1 only DELAYED it (tick0 -> step20), did not prevent it. A
+    # self-removing opponent cannot be beaten by RL. June v5 established the dive
+    # trigger disappears past ~3600m (BT flies/fights normally, real mutual
+    # damage), so BT stages must start here, NOT at the rear saddle.
+    range_m: [3600.0, 4200.0]
+    aspect_deg: [0.0, 30.0]
+    altitude_m: 7000.0
+    target_speed_mps: 250.0         # initial only; BT manages its own energy after tick 0
+    own_speed_mps: 300.0            # closure margin vs a turning target
+  range_discipline:
+    enabled: true
+    max_range_m: 7000.0             # widened to match the 3600-4200 spawn (was 3500
+                                    # for the close saddle) so a legit intercept
+                                    # turn from 4200m is not falsely penalized;
+                                    # fires only on 30 CONSECUTIVE opening steps.
+    grow_steps: 30
+  altitude_discipline:                # NEW in v2: end a dive-to-the-deck early.
+    # v1 (no altitude terminal) reproduced the June BT wall: seeded from the
+    # autopilot-weave champion, the agent pure-pursued the turning/diving BT
+    # into the ground -- "ownship altitude below min" 87%->63%, ZERO kills over
+    # 52 iters, entropy never converged. From a 7000m co-altitude spawn the
+    # per-step altitude-floor reward only bites in the last few hundred metres,
+    # far too late to arrest a committed dive, so PPO sees no reason to stay
+    # high. This terminal makes "chasing the bandit down" an EARLY, salient,
+    # credit-assignable LOSS -- the exact fix (on the vertical axis) that the
+    # range-discipline terminal was for the horizontal "extend-to-a-draw" wall.
+    enabled: true
+    floor_m: 2500.0                   # from 7000m start, ~4500m of vertical room;
+                                      # the L1 BT holds >1800m (ClimbRecover) so a
+                                      # legit engagement never needs below 2500m.
+    sustain_steps: 3                  # small hysteresis: a brief transient dip that
+                                      # immediately recovers won't false-trigger.
+  target_weave:
+    enabled: false                  # inert vs BT (autopilot-only feature)
+  target_autopilot:                 # inert under behavior_tree; config completeness
+    heading_cmd: 0.0
+    altitude_cmd: -7000.0
+    speed_cmd: 250.0
+  wez:
+    angle_deg: 2.0                  # TRUE kill cone; symmetric -- the L1 BT shoots back
+    min_range_m: 152.4
+    max_range_m: 914.4
+  reward:                           # exploit-free v15 block, unchanged from the weave chain
+    win_reward: 220.0
+    forced_ground_reward: 0.0       # keep 0: no camping for BT self-crash (v3 lesson)
+    loss_reward: -150.0
+    draw_reward: -100.0
+    damage_dealt_scale: 350.0
+    damage_taken_scale: 3.0         # keep low first (v7 lesson: high taken-penalty => retreat);
+                                    # raise toward 10-20 only AFTER kills are established
+    wez_entry_bonus: 0.0
+    wez_shaping_cone_deg: 90.0
+    wez_precision_bonus_min: 0.0
+    wez_precision_bonus_max: 0.0
+    fast_kill_bonus_max: 110.0
+    fast_kill_horizon_s: 120.0      # match max_engage_time
+    fast_kill_bonus_floor_frac: 0.2
+    pbrs_gamma: 0.997
+    pbrs_ata_weight: 4.0
+    pbrs_range_weight: 1.0
+    pbrs_range_log_clip: 3.0
+    pbrs_alt_weight: 10.0
+    safety_floor_m: 300.0
+    safety_safe_m: 900.0
+    pursuit_dense_scale: 0.0
+    pursuit_half_angle_deg: 45.0
+    pursuit_range_m: 2500.0
+    step_penalty: -0.005
+    survival_bonus: 0.0
+    damage_scale: 0.0
+    low_altitude_penalty: 0.0
+    aspect_cone_deg: 30.0
+    front_cone_penalty_scale: 0.1
+    rear_cone_reward_scale: 0.0
+    critical_alt_margin_m: 300.0
+    altitude_floor_penalty_min: 1.0
+    altitude_floor_penalty_max: 1000.0
+    reward_output_scale: 0.05
+
+algo:
+  name: ppo
+  framework: torch
+  lr: 3.0e-5                        # fine-tune settings that carried the whole weave chain;
+  gamma: 0.997                      # if win_rate stalls <0.3 past iter ~60, consider lr 1e-4
+  gae_lambda: 0.95                  # for one continuation run
+  clip_param: 0.08
+  train_batch_size: 16384
+  minibatch_size: 512
+  mlp:
+    enabled: true
+    fcnet_hiddens: [256, 256]
+    fcnet_activation: tanh
+    head_fcnet_hiddens: []
+    head_fcnet_activation: tanh
+    vf_share_layers: false
+
+runtime:
+  iterations: 150
+  num_env_runners: 4
+  num_envs_per_env_runner: 1
+  rollout_fragment_length: auto
+  batch_mode: truncate_episodes
+  save_lightweight_bundle: true
+  lightweight_bundle_frequency: 10
+  save_native_checkpoint: false
+  # ic_s5_weave5_random_v1 FINAL bundle (run DONE exit=0, 150/150; final episodes
+  # all "target destroyed" at 57-161 steps -- fully converged vs the random jinker).
+  init_bundle: artifacts/models/team01/ic_s5_weave5_random_v1/bundle_000150
+
+dashboard:
+  enabled: true
+  logdir: artifacts/dashboard
+
+policy_probe:
+  enabled: false
+
+engagement_log:
+  enabled: true
+  interval: 5
+  steps: 1200
+  episodes: 1
+  print: false
+
+notes: "ic_s6 BT STAGE 1 v3: spawn moved OUT to 3600-4200m after a replay autopsy proved the rear saddle is fundamentally incompatible with a reactive BT. v1 (rear saddle, no alt terminal): agent dive-chased the BT into the ground, 0 kills/52 iters. v2 (rear saddle + altitude_discipline): the agent's OWN crash was cured (ownship-crash gone) but ~100% of episodes ended in the BT SELF-CRASHING at a consistent ~244 steps, 0 kills, reward pinned ~-135. Replay autopsy (iter20 target CSV): the L1 BT, with the agent locked on its six at 500-900m, attempts a ~180deg reversal, rolls inverted (roll 125-166 deg) and pulls into a sustained near-vertical dive (pitch -58@step60, -88@step100), riding 7000m into the ground by step244 at 97% health, ownship untouched. Identical to the June v4 close-range heading-reversal pathology; the L1 nerf only delayed it (tick0->step20), did not prevent it. CONCLUSION: a self-removing opponent cannot be beaten by RL, and the offensive-saddle bootstrap (great for a non-reacting autopilot) breaks against any reactive BT at close range. FIX: use June's proven BT-survivable spawn (>=3600m: dive trigger gone, BT flies/fights normally, real mutual damage), now combined with everything June lacked -- fixed init_bundle loader (real seeding), L1-nerfed BT, exploit-free v15 reward, AND the altitude_discipline terminal that stops the agent's own dive-chase while closing. Keep altitude_discipline (floor 2500, sustain 3) + range_discipline (max 7000). Seed = ic_s5_weave5_random_v1 final. PROBE 3 iters first: target-alt-below-min must collapse from ~100% (the BT should now survive to fight); watch for real 'target destroyed' kills and ownship-crash ~0. If the agent stands off at 3600m without closing (the June v5-v7 standoff attractor), the next lever is closure pressure / longer episodes, NOT another geometry change. Ladder revised: BT stages all spawn >=3600m; difficulty climbs via BT level L1->L4 and narrowing aspect, NOT by moving the agent to the BT's six. See experiments/BT_CURRICULUM_PLAN.md."

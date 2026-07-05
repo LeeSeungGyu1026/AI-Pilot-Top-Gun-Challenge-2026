@@ -10,6 +10,7 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from dogfight.envs.single_agent_env import DogFightEnv
+from dogfight.sim.state_schema import StateIndex
 
 
 class DogFightWrapper(DogFightEnv):
@@ -55,6 +56,16 @@ class DogFightWrapper(DogFightEnv):
         # Range-discipline: end the "extend to infinity" exploit early so the
         # departure penalty lands while it's still credit-assignable.
         self._rd_cfg = self.config.get("range_discipline") or {}
+        # Altitude-discipline: end a dive-to-the-deck early (same credit-assignment
+        # logic as range-discipline, applied to the vertical). Seeds trained vs a
+        # non-threatening autopilot pure-pursue a maneuvering/diving BT straight
+        # into the ground ("ownship altitude below min" dominates), because from a
+        # 7000m spawn the per-step altitude-floor reward only bites in the last few
+        # hundred metres -- far too late to arrest a committed dive. Ending the
+        # episode as a LOSS the moment own altitude drops below floor_m makes
+        # "chasing the bandit down" an EARLY, salient, credit-assignable loss.
+        self._ad_cfg = self.config.get("altitude_discipline") or {}
+        self._ad_counter = 0
         self._rd_prev_range = None
         self._rd_counter = 0
         # Weave curriculum: oscillate the autopilot target's heading (left/right)
@@ -69,6 +80,31 @@ class DogFightWrapper(DogFightEnv):
         self._weave_alt_base = float(_ap.get("altitude_cmd", -7000.0))
         self._weave_step = 0
         self._weave_active = True  # per-episode; may be disabled to fly straight
+        # Python-BT opponent: a scripted pursue/evade brain that drives the
+        # AUTOPILOT backend (heading/altitude/speed commands) instead of the
+        # closed BT DLL. Motivation (2026-07-05, ic_s6 v1-v6 autopsy): the DLL
+        # BT's task->control loop rolls inverted and dives into the ground under
+        # close-range pressure (64.5% of v6 episodes ended "target altitude
+        # below min"), which no XML parameter can prevent. The autopilot backend
+        # never leaves controlled flight (0 target crashes across the whole
+        # ic_s4/s5 weave curriculum), so building the opponent on top of it
+        # makes the no-suicide property structural. update_damage() is
+        # backend-symmetric, so this opponent SHOOTS whenever its nose is on the
+        # agent inside the WEZ band. Difficulty = target_bt.max_turn_rate_deg_s
+        # (one number), not a ladder of XML files.
+        self._bt_cfg = self.config.get("target_bt") or {}
+        self._bt_dt = float(self.config.get("step_ratio", 6)) / float(
+            self.config.get("sim_hz", 60)
+        )
+        self._bt_active = bool(self._bt_cfg.get("enabled"))
+        self._bt_hdg_cmd = None
+        self._bt_alt_cmd = None
+        self._bt_mode = "attack"
+        self._bt_mode_age = 0
+        self._bt_jink_side = 1.0
+        self._bt_jink_vert = 0.0
+        self._bt_jink_left = 0
+        self._bt_prev_own_pos = None
 
     def _place_offensive_saddle(self, cfg: dict) -> None:
         """Spawn the agent in an OFFENSIVE SADDLE: a few hundred metres behind a
@@ -144,12 +180,146 @@ class DogFightWrapper(DogFightEnv):
         ap["altitude_cmd"] = self._wv_alt
         self._wv_switch_left -= 1
 
+    def _apply_python_bt(self, ap: dict) -> None:
+        """Scripted pursue/evade opponent on the autopilot backend.
+
+        Runs once per wrapper step from the LAST completed frame's states.
+        ATTACK: lead-pursuit the agent (bearing to its dead-reckoned future
+        position) and match its altitude. EVADE: when the agent is saddled in
+        our rear hemisphere, nose-on, inside threat range, break across its
+        line of sight (side re-rolled per jink segment) with a bounded vertical
+        offset. All commands pass through two hard governors that make the
+        opponent both tunable and un-killable-by-itself:
+          - heading command slews at <= max_turn_rate_deg_s  (THE difficulty dial)
+          - altitude command slews at <= max_climb_rate_mps and is CLAMPED to
+            [min_altitude_m, max_altitude_m], so a ground impact cannot even be
+            commanded, let alone flown.
+        """
+        cfg = self._bt_cfg
+        own = getattr(self, "_ownship_state", None)
+        tgt = getattr(self, "_target_state", None)
+        if own is None or tgt is None:
+            return
+        own = np.asarray(own, dtype=np.float64)
+        tgt = np.asarray(tgt, dtype=np.float64)
+        if not (np.isfinite(own[:6]).all() and np.isfinite(tgt[:6]).all()):
+            return
+        rng = self._saddle_rng
+        dt = self._bt_dt
+
+        # --- geometry (2D angles for heading decisions) ---
+        dist = float(self._geo_info._get_distance(tgt, own))
+        # agent's angle off OUR nose: 0 = we point at agent, 180 = agent astern
+        ata_us_to_agent = abs(float(self._geo_info._get_antenna_train_angle(tgt, own, True)))
+        # our angle off the AGENT's nose: 0 = agent points at us (tracking)
+        ata_agent_to_us = abs(float(self._geo_info._get_antenna_train_angle(own, tgt, True)))
+        own_pos = own[:3].copy()
+        own_alt = float(own[StateIndex.ALT])
+        tgt_alt = float(tgt[StateIndex.ALT])
+
+        # first BT step of the episode: seed commands from the target's actual state
+        if self._bt_hdg_cmd is None:
+            self._bt_hdg_cmd = float(tgt[StateIndex.YAW]) % 360.0
+        if self._bt_alt_cmd is None:
+            self._bt_alt_cmd = tgt_alt
+
+        # --- threat assessment / mode with hysteresis ---
+        threat_range = float(cfg.get("threat_range_m", 1500.0))
+        rear_deg = float(cfg.get("threat_rear_deg", 90.0))
+        track_deg = float(cfg.get("threat_track_deg", 40.0))
+        mode_hold = int(cfg.get("mode_min_steps", 20))
+        evade_enabled = bool(cfg.get("evade_enabled", True))
+        threatened = (
+            evade_enabled
+            and dist < threat_range
+            and ata_us_to_agent > rear_deg
+            and ata_agent_to_us < track_deg
+        )
+        self._bt_mode_age += 1
+        if self._bt_mode_age >= mode_hold:
+            want = "evade" if threatened else "attack"
+            if want != self._bt_mode:
+                self._bt_mode = want
+                self._bt_mode_age = 0
+                self._bt_jink_left = 0  # force a fresh jink segment on entry
+
+        # --- desired heading / altitude / speed per mode ---
+        bearing_to_agent = math.degrees(
+            math.atan2(own_pos[1] - tgt[1], own_pos[0] - tgt[0])
+        ) % 360.0
+        if self._bt_mode == "evade":
+            # jink segments: re-roll break side + vertical offset at random intervals
+            if self._bt_jink_left <= 0:
+                self._bt_jink_side = float(rng.choice([-1.0, 1.0]))
+                v_dev = float(cfg.get("evade_vertical_m", 500.0))
+                self._bt_jink_vert = float(rng.uniform(-v_dev, v_dev))
+                j_lo = int(cfg.get("jink_min_steps", 25))
+                j_hi = max(j_lo, int(cfg.get("jink_max_steps", 70)))
+                self._bt_jink_left = int(rng.integers(j_lo, j_hi + 1))
+            self._bt_jink_left -= 1
+            break_deg = float(cfg.get("break_angle_deg", 100.0))
+            desired_hdg = (bearing_to_agent + self._bt_jink_side * break_deg) % 360.0
+            desired_alt = tgt_alt + self._bt_jink_vert
+            speed_cmd = float(cfg.get("speed_evade_mps", 270.0))
+        else:
+            # lead pursuit: dead-reckon the agent lead_time_s ahead. Lead is
+            # capped at HALF the current range: with a full-range cap a head-on
+            # merge dead-reckons the aim point onto (or past) our own position
+            # and the bearing to it whips around, winding the heading command.
+            lead_time = float(cfg.get("lead_time_s", 3.0))
+            aim = own_pos
+            if self._bt_prev_own_pos is not None and dt > 0.0:
+                vel = (own_pos - self._bt_prev_own_pos) / dt
+                if np.isfinite(vel).all():
+                    lead_vec = vel * lead_time
+                    lead_len = float(np.linalg.norm(lead_vec))
+                    lead_cap = 0.5 * dist
+                    if lead_len > lead_cap > 0.0:
+                        lead_vec *= lead_cap / lead_len
+                    aim = own_pos + lead_vec
+            desired_hdg = math.degrees(math.atan2(aim[1] - tgt[1], aim[0] - tgt[0])) % 360.0
+            desired_alt = own_alt
+            speed_cmd = float(cfg.get("speed_attack_mps", 260.0))
+        self._bt_prev_own_pos = own_pos
+        # Speed commands outside the airframe/autopilot's achievable band are
+        # actively dangerous: chasing an unreachable speed_cmd made the JSBSim
+        # autopilot trade ~3000m of altitude for airspeed in one diving spiral
+        # (observed with speed_cmd=340). The weave/jink curriculum flew its whole
+        # life at 250 with benign +/-300m excursions, so clamp near that band.
+        speed_cmd = min(max(speed_cmd, 180.0), float(cfg.get("speed_max_mps", 290.0)))
+
+        # --- governors: turn-rate slew (difficulty), climb slew + hard altitude clamp ---
+        max_turn = float(cfg.get("max_turn_rate_deg_s", 8.0)) * dt
+        hdg_err = ((desired_hdg - self._bt_hdg_cmd + 180.0) % 360.0) - 180.0
+        self._bt_hdg_cmd = (self._bt_hdg_cmd + max(-max_turn, min(max_turn, hdg_err))) % 360.0
+        # Never let the COMMAND wind further than command_lead_max_deg beyond the
+        # aircraft's ACTUAL heading. The autopilot plant turns slower than the
+        # command slew; without this clamp a 180-deg bearing flip at the merge
+        # leaves the command 100+ deg ahead of the airframe, and the fight is
+        # over before the plane finishes chasing its own command around.
+        lead_max = float(cfg.get("command_lead_max_deg", 45.0))
+        actual_hdg = float(tgt[StateIndex.YAW]) % 360.0
+        cmd_off = ((self._bt_hdg_cmd - actual_hdg + 180.0) % 360.0) - 180.0
+        self._bt_hdg_cmd = (actual_hdg + max(-lead_max, min(lead_max, cmd_off))) % 360.0
+
+        max_climb = float(cfg.get("max_climb_rate_mps", 40.0)) * dt
+        alt_err = desired_alt - self._bt_alt_cmd
+        self._bt_alt_cmd += max(-max_climb, min(max_climb, alt_err))
+        alt_lo = float(cfg.get("min_altitude_m", 3000.0))
+        alt_hi = float(cfg.get("max_altitude_m", 11000.0))
+        self._bt_alt_cmd = min(max(self._bt_alt_cmd, alt_lo), alt_hi)
+
+        ap["heading_cmd"] = self._bt_hdg_cmd
+        ap["altitude_cmd"] = -self._bt_alt_cmd  # NED: Down-positive
+        ap["speed_cmd"] = speed_cmd
+
     def reset(self, *args, **kwargs):
         # Start each episode from a neutral action so the first step is also
         # slew-limited (no violent input out of the gate).
         self._prev_action = np.zeros(4, dtype=np.float32)
         self._rd_prev_range = None
         self._rd_counter = 0
+        self._ad_counter = 0
         self._weave_step = 0
         # Decide once per episode whether the target weaves or flies straight.
         # straight_prob fraction of episodes are straight & level (anti-forgetting);
@@ -167,6 +337,21 @@ class DogFightWrapper(DogFightEnv):
         self._wv_hdg_rate = 0.0
         self._wv_v_rate = 0.0
         self._wv_switch_left = 0
+        # Python-BT per-episode state: commands re-seed from the target's actual
+        # attitude on the first step; every episode opens in ATTACK.
+        # target_bt.prob (default 1.0) = fraction of episodes the BT drives the
+        # target; the rest fall through to the weave/random-jink path so the
+        # mastered autopilot-evader skill keeps getting on-policy positive
+        # reward (anti-forgetting + keeps wins in every PPO batch).
+        self._bt_active = bool(self._bt_cfg.get("enabled")) and (
+            self._saddle_rng.uniform() < float(self._bt_cfg.get("prob", 1.0))
+        )
+        self._bt_hdg_cmd = None
+        self._bt_alt_cmd = None
+        self._bt_mode = "attack"
+        self._bt_mode_age = 0
+        self._bt_jink_left = 0
+        self._bt_prev_own_pos = None
         if self._weave_cfg.get("enabled") and self.config.get("target_mode") == "autopilot":
             ap = self.config.get("target_autopilot") or {}
             ap["heading_cmd"] = self._weave_base
@@ -178,6 +363,12 @@ class DogFightWrapper(DogFightEnv):
 
     def step(self, action):
         if (
+            self._bt_active
+            and self._bt_cfg.get("enabled")
+            and self.config.get("target_mode") == "autopilot"
+        ):
+            self._apply_python_bt(self.config["target_autopilot"])
+        elif (
             self._weave_active
             and self._weave_cfg.get("enabled")
             and self.config.get("target_mode") == "autopilot"
@@ -215,6 +406,8 @@ class DogFightWrapper(DogFightEnv):
         result = super().step(action)
         if self._rd_cfg.get("enabled") and isinstance(result, tuple) and len(result) == 5:
             result = self._apply_range_discipline(result)
+        if self._ad_cfg.get("enabled") and isinstance(result, tuple) and len(result) == 5:
+            result = self._apply_altitude_discipline(result)
         return result
 
     def _apply_range_discipline(self, result):
@@ -248,6 +441,41 @@ class DogFightWrapper(DogFightEnv):
             if isinstance(info, dict):
                 info = {**info, "end_condition": "range discipline", "outcome": "loss"}
             self._rd_counter = 0
+            return (obs, reward, terminated, truncated, info)
+        return result
+
+    def _apply_altitude_discipline(self, result):
+        """Terminate (as a LOSS) once own altitude has stayed below floor_m for
+        `sustain_steps` consecutive steps. Mirrors _apply_range_discipline but on
+        the vertical axis: it makes "pure-pursuing the bandit into a dive" an
+        EARLY, salient, credit-assignable loss instead of a late "ownship altitude
+        below min" crash the value head cannot foresee from 7000m up.
+
+        floor_m sits well above the ground (e.g. 2500m from a 7000m co-altitude
+        start) so it ends losing energy states without clipping a legitimate high
+        gun pass. `sustain_steps` (default 1) adds optional hysteresis so a brief
+        transient dip that immediately recovers does not false-trigger.
+        """
+        obs, reward, terminated, truncated, info = result
+        if terminated or truncated:
+            return result
+
+        alt = float(self._ownship_state[StateIndex.ALT])
+        floor_m = float(self._ad_cfg.get("floor_m", 2500.0))
+        sustain = max(1, int(self._ad_cfg.get("sustain_steps", 1)))
+
+        if alt < floor_m:
+            self._ad_counter += 1
+        else:
+            self._ad_counter = 0
+
+        if self._ad_counter >= sustain:
+            loss = float((self.config.get("reward") or {}).get("loss_reward", -150.0))
+            reward = float(reward) + loss
+            terminated = True
+            if isinstance(info, dict):
+                info = {**info, "end_condition": "altitude discipline", "outcome": "loss"}
+            self._ad_counter = 0
             return (obs, reward, terminated, truncated, info)
         return result
 

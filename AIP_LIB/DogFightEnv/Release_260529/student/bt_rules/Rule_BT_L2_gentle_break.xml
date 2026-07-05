@@ -1,0 +1,65 @@
+<!--
+  BT difficulty ladder L2: L1 + ONE gentle LEVEL defensive break.
+
+  Adds back a single Task_DefensiveBreak with a TIGHT trigger envelope and
+  VerticalOffset=0 (level break, no diving):
+    - fires only when the agent is close (<1400m), in the BT's rear quarter
+      (LOS>110) AND actually tracking (TargetLOS<20).
+  No RearThreatJink, no HardRearBreak, no LowYoYo (the vertical/dive tasks).
+
+  Spawn guidance: keep the spawn band OUTSIDE the trigger (min range >=1600m)
+  so the break can only fire MID-FIGHT after the agent closes; this avoids
+  the known tick-0 degenerate-geometry suicide dive that full defensive BTs
+  showed when spawned upon at close range (see AUTONOMOUS_RUN_LOG ic_s3_bt_v4).
+  Run an 8-episode probe + end_condition breakdown before any long run.
+-->
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence>
+      <SelectTarget name="SelectTarget" BB="{BB}"/>
+      <DirectionVectorUpdate name="DirectionVectorUpdate" BB="{BB}"/>
+      <DistanceUpdate name="DistanceUpdate" BB="{BB}"/>
+      <CheckSight name="CheckSight" BB="{BB}"/>
+      <AngleOffUpdate name="AngleOffUpdate" BB="{BB}"/>
+      <AspectAngleUpdate name="AspectAngleUpdate" BB="{BB}"/>
+
+      <Fallback>
+        <Sequence>
+          <DECO_AltitudeCheck name="LowAltitudeCheck" UpDown="Less" Altitude="1800" BB="{BB}"/>
+          <Task_ClimbRecover name="ClimbRecover" MinAltitude="2500" ForwardDistance="4500" BB="{BB}"/>
+        </Sequence>
+
+        <Sequence>
+          <DECO_DistanceCheck name="BreakRangeCheck" UpDown="Less" Distance="1400" BB="{BB}"/>
+          <DECO_LOSCheck name="RearQuarterCheck" UpDown="Greater" InputLOS="110" BB="{BB}"/>
+          <DECO_TargetLOSCheck name="TargetLeadThreatCheck" UpDown="Less" InputLOS="20" BB="{BB}"/>
+          <Task_DefensiveBreak name="GentleBreakTurn" BreakDistance="4700" VerticalOffset="0" BB="{BB}"/>
+        </Sequence>
+
+        <Sequence>
+          <DECO_DistanceCheck name="OvershootRangeCheck" UpDown="Less" Distance="750" BB="{BB}"/>
+          <DECO_LOSCheck name="LostNoseCheck" UpDown="Greater" InputLOS="55" BB="{BB}"/>
+          <Task_Recommit name="CloseRecommit" LeadDistance="1300" VerticalOffset="120" BB="{BB}"/>
+        </Sequence>
+
+        <Sequence>
+          <DECO_DistanceCheck name="FarRecommitCheck" UpDown="Greater" Distance="2500" BB="{BB}"/>
+          <Task_Recommit name="FarRecommit" LeadDistance="1700" VerticalOffset="150" BB="{BB}"/>
+        </Sequence>
+
+        <Sequence>
+          <DECO_LOSCheck name="NoseOnTargetCheck" UpDown="Less" InputLOS="30" BB="{BB}"/>
+          <DECO_DistanceCheck name="InsideWeaponsRangeCheck" UpDown="Less" Distance="950" BB="{BB}"/>
+          <Task_LeadPursuit name="GunLeadPursuit" MaxLeadDistance="1100" VerticalOffset="40" BB="{BB}"/>
+        </Sequence>
+
+        <Sequence>
+          <DECO_DistanceCheck name="MidFightCheck" UpDown="Less" Distance="2500" BB="{BB}"/>
+          <Task_LagPursuit name="LagPursuit" LagDistance="650" VerticalOffset="80" BB="{BB}"/>
+        </Sequence>
+
+        <Task_LagPursuit name="LagPursuitDefault" LagDistance="500" VerticalOffset="80" BB="{BB}"/>
+      </Fallback>
+    </Sequence>
+  </BehaviorTree>
+</root>

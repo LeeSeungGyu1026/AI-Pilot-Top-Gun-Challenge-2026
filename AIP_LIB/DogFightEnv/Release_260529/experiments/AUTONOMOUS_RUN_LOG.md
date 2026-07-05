@@ -513,3 +513,56 @@ switch every 20-90 steps, altitude +/-1200m, straight_prob 0.10. Reward = exploi
 bundle_000050 (converged 1.0). 150 iters. RUNDIR `artifacts/watch/20260705_010645`,
 tag team01/ic_s5_weave5_random_v1. Success = win holds high vs the unpredictable jinker; crash ~0.
 Result: **pending**.
+
+**STAGE 5 (random jink) RESULT: DONE exit=0, 150/150 iters.** Converged fast (stage-4 policy nearly
+transferred: win 0.965 @iter0, no crash-spike). Training win_rate held ~0.97-0.99 throughout, last-30
+(iters120-149) mean 0.9971, crash 0.00, timeout 0 the entire run. So the agent beats the fully
+unpredictable jinker ~99.7% within the 90s training window. Champion: `ic_s5_weave5_random_v1/bundle_000150`.
+
+**Held-out eval at COMPETITION timing (run_eval --target-backend autopilot --experiment-yaml stage5,
+default ~300s, deterministic policy, 30 eps): 77% win / 0% loss / 23% draw** (23 target destroyed, 2
+timeout, 5 fuel fail). 0 losses ever. The 23% draw (vs 0.3% at 90s training) is the random jinker
+surviving into extended chases where the longer window lets OWNSHIP FUEL run out (5 "fuel fail") -- i.e.
+the honest gap vs the hardest evader is finishing-within-fuel on long random-jink chases, not losing.
+
+**FULL ic_s4/s5 WEAVE CURRICULUM COMPLETE.** From the v15 level-target 100% champion:
+stage1 gentle -> stage2 moderate -> stage3 strong -> stage4 max-rate turn -> stage5 RANDOM JINK, each
+seeded from the prior, reward = exploit-free v15, all reached ~1.0 training win with crash 0 and no
+forgetting (straight episodes stay 1.0). Champion vs the hardest autopilot evader:
+`team01/ic_s5_weave5_random_v1/bundle_000150` (train ~0.997; held-out 77% win / 0 loss @300s).
+NEXT: BT opponent (ic_s6, design already drafted in memory) -- the real remaining competition gap.
+
+---
+
+## 2026-07-05 — PYTHON BT OPPONENT (user directive: replace the DLL BT entirely)
+
+**Why:** v6 breakdown proved the DLL BT self-crashes in 64.5% of episodes (inverted
+reversal dive) and no XML parameter can prevent it — the task->control loop is inside
+the closed DLL. User directed a from-scratch BT with (a) no suicide, (b) real
+evade+attack, (c) difficulty via a max-turn-rate limit instead of multiple rule files.
+
+**Design (DogFightEnvWrapper `target_bt`, runs on `target_mode: autopilot`):** a scripted
+pursue/evade brain sets heading/altitude/speed autopilot commands each wrapper step.
+update_damage() is backend-symmetric, so this opponent SHOOTS whenever its nose is in the
+WEZ — no DLL needed. ATTACK = lead pursuit (dead-reckoned aim, lead capped at 0.5*range to
+avoid head-on aim whip), match agent altitude. EVADE = when agent is saddled (<threat_range,
+rear hemisphere, nose-on) break across the LOS with per-segment random side + bounded
+vertical jink. Governors: heading-cmd slew <= `max_turn_rate_deg_s` (THE difficulty dial),
+command never winds >45deg past actual heading (plant lag guard), altitude cmd slew-limited
+and HARD-CLAMPED to [min_altitude_m, max_altitude_m] => a ground impact cannot be commanded.
+speed_cmd clamped to <=290 (chasing an unreachable speed made the JSBSim autopilot trade
+~3000m altitude for airspeed — the same family of dive the DLL BT died of).
+
+**Verified (scripts/smoke_python_bt_target.py, 7/7 PASS):** A head-on merge: closes to
+<950m, no crash. B agent-saddled at 600-800m: evade engages, jink sides re-roll, target
+never below ~3400m actual (cmd clamp 3000), never "target altitude below min". C BT on the
+agent's six at 600m: real gunnery, own_hp 1.00 -> 0.85 in ~10s. Known platform trait
+(pre-existing, also present all through the weave curriculum): the autopilot sags up to
+~2-3km altitude then recovers when speed/geometry change hard; keep altitude_discipline
+floor 1200 for the ownship. Effective plant turn rate saturates ~/above ~8 deg/s, so the
+useful difficulty band is max_turn_rate_deg_s ~ 2 (easy) .. 8 (plant limit).
+
+**Next:** ic_s7 BT1 = target_bt with max_turn_rate_deg_s ~3-4, evade_enabled true,
+spawn = mastered rear saddle (close spawns are safe again — no tick-0 dive exists),
+v15 reward + 8deg cone, seed = ic_s5 champion. Ladder = turn rate 3 -> 5 -> 8, then
+narrow cone 8 -> 4 -> 2. Mix 20-30% random-jink autopilot episodes for anti-forgetting.
