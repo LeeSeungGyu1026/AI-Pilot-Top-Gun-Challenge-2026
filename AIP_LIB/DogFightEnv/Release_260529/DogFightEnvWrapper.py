@@ -288,13 +288,25 @@ class DogFightWrapper(DogFightEnv):
             and ata_us_to_agent > rear_deg
             and ata_agent_to_us < track_deg
         )
+        # ATTACK is the default posture; EVADE is a bounded emergency maneuver,
+        # not a lifestyle. ic_s8 v1 autopsy (2026-07-05): with symmetric mode
+        # hold and no evade cap, the BT at official spawns broke away and kept
+        # extending — 89% of episodes ended in the agent's range-discipline
+        # terminal with ZERO gun engagements on either side. Two asymmetries fix
+        # that: (a) evade ends the moment the threat geometry is gone (no hold),
+        # and (b) evade_max_steps hard-caps a single defensive excursion, after
+        # which the BT recommits to attack even if still nominally threatened.
         self._bt_mode_age += 1
-        if self._bt_mode_age >= mode_hold:
-            want = "evade" if threatened else "attack"
-            if want != self._bt_mode:
-                self._bt_mode = want
+        if self._bt_mode == "evade":
+            evade_cap = int(cfg.get("evade_max_steps", 60))
+            if (not threatened) or self._bt_mode_age >= evade_cap:
+                self._bt_mode = "attack"
                 self._bt_mode_age = 0
-                self._bt_jink_left = 0  # force a fresh jink segment on entry
+        else:
+            if threatened and self._bt_mode_age >= mode_hold:
+                self._bt_mode = "evade"
+                self._bt_mode_age = 0
+                self._bt_jink_left = 0  # fresh jink segment on entry
 
         # --- desired heading / altitude / speed per mode ---
         bearing_to_agent = math.degrees(
