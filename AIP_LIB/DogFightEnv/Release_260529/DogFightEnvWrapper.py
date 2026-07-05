@@ -9,7 +9,7 @@ _SRC = _ROOT / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from dogfight.envs.single_agent_env import DogFightEnv
+from dogfight.envs.single_agent_env import DogFightEnv, REF_OLD_RANDOM_SCENARIOS
 from dogfight.sim.state_schema import StateIndex
 
 
@@ -179,6 +179,59 @@ class DogFightWrapper(DogFightEnv):
         ap["heading_cmd"] = self._wv_heading
         ap["altitude_cmd"] = self._wv_alt
         self._wv_switch_left -= 1
+
+    def _place_official_spawn(self, cfg: dict) -> None:
+        """Competition-official initial conditions on the AUTOPILOT backend.
+
+        Replicates the platform's ref_old_random scenario table (the
+        competition mixed 1v1 set: tail-chase / offset / crossing / defensive /
+        head-to-tail at 8000-8500m, 250 m/s) plus its per-aircraft jitter and
+        shared translation — WITHOUT using initial_scenario.mode=ref_old_random,
+        because that mode force-switches target_mode to behavior_tree/loiter at
+        every reset, which would bypass the Python BT and hand the target back
+        to the suicide-diving DLL. Positions are set via change_init_position
+        before super().reset() (same rule-clean pattern as offensive_saddle).
+        """
+        rng = self._saddle_rng
+        indices = list(cfg.get("scenario_indices", sorted(REF_OLD_RANDOM_SCENARIOS)))
+        idx = int(indices[int(rng.integers(0, len(indices)))])
+        ownship, target = REF_OLD_RANDOM_SCENARIOS[idx]
+
+        radius = float(cfg.get("aircraft_radius_m", 100.0))
+        r_rpy = (
+            float(cfg.get("roll_deg", 5.0)),
+            float(cfg.get("pitch_deg", 5.0)),
+            float(cfg.get("heading_deg", 5.0)),
+        )
+        # shared translation moves BOTH aircraft identically (relative geometry
+        # preserved); the D component shifts the whole fight's altitude band.
+        shared = np.array(
+            [
+                float(rng.uniform(-1.0, 1.0)) * float(cfg.get("shared_n_m", 4000.0)),
+                float(rng.uniform(-1.0, 1.0)) * float(cfg.get("shared_e_m", 4000.0)),
+                float(rng.uniform(-1.0, 1.0)) * float(cfg.get("shared_d_m", 4000.0)),
+            ]
+        )
+        # keep the shared altitude shift from planting the fight in the dirt:
+        # post-shift altitude = alt - shared_d, so clamp shared_d such that the
+        # LOWER aircraft still spawns above min_spawn_alt_m.
+        min_alt = float(cfg.get("min_spawn_alt_m", 4000.0))
+        lowest = min(-ownship[2], -target[2])  # D is Down-positive
+        shared[2] = min(shared[2], lowest - min_alt)
+
+        for name, row in (("ownship", ownship), ("target", target)):
+            jn = float(rng.uniform(-radius, radius))
+            je = float(rng.uniform(-radius, radius))
+            self.change_init_position(
+                name,
+                init_n=row[0] + shared[0] + jn,
+                init_e=row[1] + shared[1] + je,
+                init_d=row[2] + shared[2],
+                init_roll=row[3] + float(rng.uniform(-r_rpy[0], r_rpy[0])),
+                init_pitch=row[4] + float(rng.uniform(-r_rpy[1], r_rpy[1])),
+                init_heading=(row[5] + float(rng.uniform(-r_rpy[2], r_rpy[2]))) % 360.0,
+                init_speed=row[6],
+            )
 
     def _apply_python_bt(self, ap: dict) -> None:
         """Scripted pursue/evade opponent on the autopilot backend.
@@ -357,7 +410,10 @@ class DogFightWrapper(DogFightEnv):
             ap["heading_cmd"] = self._weave_base
             ap["altitude_cmd"] = self._weave_alt_base
         saddle = self.config.get("offensive_saddle") or {}
-        if saddle.get("enabled"):
+        official = self.config.get("official_spawn") or {}
+        if official.get("enabled"):
+            self._place_official_spawn(official)
+        elif saddle.get("enabled"):
             self._place_offensive_saddle(saddle)
         return super().reset(*args, **kwargs)
 
@@ -441,6 +497,10 @@ class DogFightWrapper(DogFightEnv):
             if isinstance(info, dict):
                 info = {**info, "end_condition": "range discipline", "outcome": "loss"}
             self._rd_counter = 0
+            # print in the platform's episode-end format: wrapper terminals are
+            # otherwise INVISIBLE in train.log, which made end_condition_breakdown
+            # report "100% target destroyed" while loss_rate was 0.2+ (2026-07-05).
+            self._print_episode_termination("range discipline")
             return (obs, reward, terminated, truncated, info)
         return result
 
@@ -476,6 +536,7 @@ class DogFightWrapper(DogFightEnv):
             if isinstance(info, dict):
                 info = {**info, "end_condition": "altitude discipline", "outcome": "loss"}
             self._ad_counter = 0
+            self._print_episode_termination("altitude discipline")
             return (obs, reward, terminated, truncated, info)
         return result
 
