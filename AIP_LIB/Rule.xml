@@ -1,5 +1,6 @@
-<root main_tree_to_execute="MainTree">
-  <BehaviorTree ID="MainTree">
+<root main_tree_to_execute="MainTree"> <!--어떤 노드가 순서대로 실행될지 정의-->
+  <!-- 시퀀스로 상태 갱신 노드 실행(필수임) Fallback으로 우선순위별 행동 분기 검사 -->
+  <BehaviorTree ID="MainTree"> 
     <Sequence>
       <SelectTarget name="SelectTarget" BB="{BB}"/>
       <DirectionVectorUpdate name="DirectionVectorUpdate" BB="{BB}"/>
@@ -7,19 +8,27 @@
       <CheckSight name="CheckSight" BB="{BB}"/>
       <AngleOffUpdate name="AngleOffUpdate" BB="{BB}"/>
       <AspectAngleUpdate name="AspectAngleUpdate" BB="{BB}"/>
-
+      <!-- 요 위에 애들은 BB에 상태값을 채워넣음 -->
       <Fallback>
         <Sequence>
+          <!-- DECO붙은 애들은 success/failure 판정, 그래서 다 이름에 check들어감
+           UpDown은 조건문의 부등호 결정
+          고도가 낮으면 고도 올리기 -->
           <DECO_AltitudeCheck name="LowAltitudeCheck" UpDown="Less" Altitude="900" BB="{BB}"/>
           <Task_ClimbRecover name="ClimbRecover" MinAltitude="1500" ForwardDistance="4500" BB="{BB}"/>
         </Sequence>
 
+        <!-- 적이 나를 비교적 정면에 가깝게 바라보고 있다
+        즉, 적이 나를 잘 추적하고 있거나, 거의 정면으로 겨냥하고 있는 상태: 적이 나를 보는 LOS가 55보다 작다 + 거리가 2800보다 작다
+        이 파트는 방어기동 조건문-->
         <Sequence>
           <DECO_DistanceCheck name="HardRearBreakRangeCheck" UpDown="Less" Distance="2800" BB="{BB}"/>
           <DECO_TargetLOSCheck name="HardRearTrackingCheck" UpDown="Less" InputLOS="55" BB="{BB}"/>
           <Task_DefensiveBreak name="HardRearBreakTurn" BreakDistance="7200" VerticalOffset="0" BB="{BB}"/>
         </Sequence>
 
+        <!-- 내가 적을 보는 LOS가 125 이상 (뒤에 있다고 간주) + 적이 나를 보는 LOS가 12도 미만 + 거리 가까우면
+        적이 뒤에서 위협하고 있고, 나를 좁은 각도로 추적 중일 때 회피 기동한다 -->
         <Sequence>
           <DECO_DistanceCheck name="RearThreatRangeCheck" UpDown="Less" Distance="3200" BB="{BB}"/>
           <DECO_LOSCheck name="TargetBehindCheck" UpDown="Greater" InputLOS="125" BB="{BB}"/>
@@ -28,6 +37,10 @@
           <Task_RearThreatJink name="RearThreatJink" LateralDistance="4800" ForwardDistance="700" VerticalOffset="650" BB="{BB}"/>
         </Sequence>
 
+        <!-- 후방 사분면 위협 상황에서 방어적으로 탈출한다 
+        후방 사분면 체크: 내가 적을 바라보는 LOS가 95보다 크다.
+        적이 나를 바라보는 LOS가 35보다 작다
+        그러면, 탈출기동 수행 -->
         <Sequence>
           <DECO_DistanceCheck name="BreakRangeCheck" UpDown="Less" Distance="2300" BB="{BB}"/>
           <DECO_LOSCheck name="RearQuarterCheck" UpDown="Greater" InputLOS="95" BB="{BB}"/>
@@ -35,12 +48,16 @@
           <Task_DefensiveBreak name="BreakTurn" BreakDistance="4700" VerticalOffset="350" BB="{BB}"/>
         </Sequence>
 
+        <!-- 거리 750 미만(매우 가까움) + 내가 적을 보는 LOS가 55 이상(방금 지나쳤음)
+        근접 거리에서 적의 노즈가 나를 지나쳤고 재접근을 시도한다 -->
         <Sequence>
           <DECO_DistanceCheck name="OvershootRangeCheck" UpDown="Less" Distance="750" BB="{BB}"/>
           <DECO_LOSCheck name="LostNoseCheck" UpDown="Greater" InputLOS="55" BB="{BB}"/>
           <Task_Recommit name="CloseRecommit" LeadDistance="1300" VerticalOffset="120" BB="{BB}"/>
         </Sequence>
 
+        <!-- 상대와 거리가 950~2600 + 내가 적을 보는 LOS가 35~130
+        원형 회피와 상승을 병행해 생존성을 높인다 -->
         <Sequence>
           <DECO_DistanceCheck name="LowYoYoBandCheck" UpDown="Less" Distance="2600" BB="{BB}"/>
           <DECO_DistanceCheck name="LowYoYoMinRangeCheck" UpDown="Greater" Distance="950" BB="{BB}"/>
@@ -49,22 +66,27 @@
           <Task_LowYoYo name="LowYoYo" DiveOffset="700" PullLeadDistance="1100" MinAltitude="1300" BB="{BB}"/>
         </Sequence>
 
+        <!-- 멀리 떨어져 있을 때 재접근을 위해 선두를 다시 잡는다 -->
         <Sequence>
           <DECO_DistanceCheck name="FarRecommitCheck" UpDown="Greater" Distance="2500" BB="{BB}"/>
+          <!-- 선두를 잡고 재접근한다 -->
           <Task_Recommit name="FarRecommit" LeadDistance="1700" VerticalOffset="150" BB="{BB}"/>
         </Sequence>
 
+        <!-- 내가 적을 보는 LOS가 30미만 + 거리 가까우면 공격용 추격을 수행한다 선행추격 Lead-->
         <Sequence>
           <DECO_LOSCheck name="NoseOnTargetCheck" UpDown="Less" InputLOS="30" BB="{BB}"/>
           <DECO_DistanceCheck name="InsideWeaponsRangeCheck" UpDown="Less" Distance="950" BB="{BB}"/>
           <Task_LeadPursuit name="GunLeadPursuit" MaxLeadDistance="1100" VerticalOffset="40" BB="{BB}"/>
         </Sequence>
 
+        <!-- 이 위에 조건들 다 폴백뜨고나서, 거리가 가까우면 중거리 전투에서 후방 추격을 유지한다 지연 추격 Lag-->
         <Sequence>
           <DECO_DistanceCheck name="MidFightCheck" UpDown="Less" Distance="2500" BB="{BB}"/>
           <Task_LagPursuit name="LagPursuit" LagDistance="650" VerticalOffset="80" BB="{BB}"/>
         </Sequence>
 
+        <!-- 기본 분기: 위 조건들이 모두 만족하지 않을 때는 기본적인 후방 추격을 수행한다 -->
         <Task_LagPursuit name="LagPursuitDefault" LagDistance="500" VerticalOffset="80" BB="{BB}"/>
       </Fallback>
     </Sequence>

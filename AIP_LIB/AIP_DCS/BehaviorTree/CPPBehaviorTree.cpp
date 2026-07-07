@@ -3,6 +3,7 @@
 
 #include "CPPBehaviorTree.h"
 
+#include <fstream>
 
 Vector3 UCPPBehaviorTree::LLAtoCartesian(Vector3 LLA, Vector3 BaseLLA)
 {
@@ -85,10 +86,16 @@ void UCPPBehaviorTree::init()
 
 
 	//파일로 트리 구조 정의
-	//자신의 팀 이름으로	xml 파일 만들어서 입력해주세요!!!!!! (Rule_forTraining.xml은 예시입니다)
-	tree = Factory.createTreeFromFile("./Rule_forTraining.xml"); 
+	//커스텀 규칙 XML은 Rule.xml을 우선 사용하고, 없으면 기존 Rule_forTraining.xml을 사용한다
+	std::string rulePath = "./Rule.xml";
+	std::ifstream ruleFile(rulePath.c_str());
+	if (!ruleFile.good())
+	{
+		rulePath = "./Rule_forTraining.xml";
+	}
+	tree = Factory.createTreeFromFile(rulePath); 
 	
-	std::cout << "Behavior Tree Initialized" << std::endl;
+	std::cout << "Behavior Tree Initialized from " << rulePath << std::endl;
 	//블랙보드 연결 : 원래는 블랙보드 내에 있는 모든 변수를 하나하나 이런식으로 입력해줘야하는 미친 비효율을 보이는 방식이지만 커스텀 블랙보드를 만들어 해당 블랙보드를 입력시킴
 	tree.rootBlackboard()->set<CPPBlackBoard*>("BB", BB);
 	

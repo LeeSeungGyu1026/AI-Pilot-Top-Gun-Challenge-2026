@@ -15,9 +15,11 @@ namespace Action
 	{
 		Optional<CPPBlackBoard*> BB = getInput<CPPBlackBoard*>("BB");
 
+		// My: 내 기체
+		// Target: 타겟 기체
 		Vector3 MyLocation = (*BB)->MyLocation_Cartesian;
 		Vector3 TargetLocation = (*BB)->TargetLocaion_Cartesian;
-
+		// 둘 사이 거리
 		float Distance = MyLocation.distance(TargetLocation);
 		
 		(*BB)->Distance = Distance;

@@ -14,7 +14,7 @@ namespace Action
 	NodeStatus DirectionVectorUpdate::tick()
 	{
 		Optional<CPPBlackBoard*> BB = getInput<CPPBlackBoard*>("BB");
-
+		// 내 기체 자세
 		EulerAngle MyRotation = (*BB)->MyRotation_EDegree;
 		
 		//아군기

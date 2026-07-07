@@ -24,3 +24,5 @@
 # Live training run outputs (large, constantly changing, not source)
 AIP_LIB/DogFightEnv/*/artifacts/
 *.lock
+
+*.pdf

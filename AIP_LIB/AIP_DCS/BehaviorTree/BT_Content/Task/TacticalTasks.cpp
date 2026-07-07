@@ -25,19 +25,20 @@ namespace
 	// dive bias, which is the primary fix; this is defense in depth.
 	constexpr double kHardAltitudeFloor = 1800.0;
 
-	Vector3 WorldUp()
+	Vector3 WorldUp() // 월드 상의 z방향
 	{
 		return Vector3(0.0, 0.0, 1.0);
 	}
 
-	Vector3 SafeDirection(Vector3 value, Vector3 fallback)
+	Vector3 SafeDirection(Vector3 value, Vector3 fallback) // 방향 벡터 정상화&정규화 하는 함수
 	{
-		if (value.length() < kMinVectorLength)
+		if (value.length() < kMinVectorLength) // 벡터의 크기가 너무 작으면 폴백
 		{
+			// 폴백 값은 함수 호출할 때 줌. 비정상 시 대체할 변수 넣음
 			value = fallback;
 		}
 
-		if (value.length() < kMinVectorLength)
+		if (value.length() < kMinVectorLength) // 
 		{
 			value = Vector3(1.0, 0.0, 0.0);
 		}
@@ -72,15 +73,15 @@ namespace
 		BB->Throttle = std::max(0.0f, std::min(1.0f, throttle));
 	}
 
-	Vector3 TargetDirection(CPPBlackBoard* BB)
+	Vector3 TargetDirection(CPPBlackBoard* BB) // 적군까지의 벡터
 	{
 		Vector3 toTarget = BB->TargetLocaion_Cartesian - BB->MyLocation_Cartesian;
-		return SafeDirection(toTarget, BB->MyForwardVector);
+		return SafeDirection(toTarget, BB->MyForwardVector); // 폴백은 내가 바라보고 있는 방향
 	}
 
 	Vector3 TargetForward(CPPBlackBoard* BB)
 	{
-		return SafeDirection(BB->TargetForwardVector, TargetDirection(BB));
+		return SafeDirection(BB->TargetForwardVector, TargetDirection(BB)); // 폴백은 적군방향
 	}
 
 	Vector3 OwnForward(CPPBlackBoard* BB)
@@ -182,19 +183,22 @@ namespace Action
 		};
 	}
 
-	NodeStatus Task_DefensiveBreak::tick()
+	NodeStatus Task_DefensiveBreak::tick() // 적군과 거리가 많이 가깝고, LOS가 55도 미만
+	// 적이랑 가깝고, 좀 불리한 상황(기하적으로)에서 벗어나소, 기울기 바꾸는 행동
 	{
 		Optional<CPPBlackBoard*> BBInput = getInput<CPPBlackBoard*>("BB");
 		CPPBlackBoard* BB = BBInput.value();
 
-		double breakDistance = ReadDouble(config(), "BreakDistance", 5200.0);
+		double breakDistance = ReadDouble(config(), "BreakDistance", 5200.0); // 
 		double verticalOffset = ReadDouble(config(), "VerticalOffset", 650.0);
 		Vector3 toTarget = BB->TargetLocaion_Cartesian - BB->MyLocation_Cartesian;
+		// SafeDirection은 무슨 방향이든 정상적인&정규화된 값 반환
+		// 타겟이 위치한 방향 (좌/우 등)
 		double lateralDot = SafeDirection(toTarget, OwnForward(BB) * -1.0).dot(OwnRight(BB));
 		double side = 0.0;
 		if (std::abs(lateralDot) > 0.08)
 		{
-			side = (lateralDot >= 0.0) ? 1.0 : -1.0;
+			side = (lateralDot >= 0.0) ? 1.0 : -1.0; // 여기서 좌/우 갈리는 듯
 		}
 		else
 		{
@@ -202,12 +206,13 @@ namespace Action
 		}
 		double climbBias = (BB->MyLocation_Cartesian.Z < 1400.0) ? 0.50 : 0.0;
 		Vector3 breakDirection = SafeDirection(OwnRight(BB) * side * 1.65 - OwnForward(BB) * 0.10 + WorldUp() * climbBias, OwnRight(BB) * side);
+		// vp는 목표 point
 		Vector3 vp = BB->MyLocation_Cartesian + breakDirection * breakDistance + WorldUp() * verticalOffset;
 		if (BB->MyLocation_Cartesian.Z < 1400.0)
 		{
 			vp.Z = std::max(vp.Z, 1750.0);
 		}
-
+		// 기하적으로 불리한 상황에서, 이 상황을 탈출할 먼 지점 하나(vp)를 목표지점으로 찍음
 		SetCommand(BB, vp, 1.0f);
 		return NodeStatus::SUCCESS;
 	}
@@ -303,14 +308,15 @@ namespace Action
 	}
 
 	NodeStatus Task_LowYoYo::tick()
-	{
+	{   // 최소 고도까지는 올라오게 보장하고, 적군의 정면방향벡터랑 
+		
 		Optional<CPPBlackBoard*> BBInput = getInput<CPPBlackBoard*>("BB");
 		CPPBlackBoard* BB = BBInput.value();
 
 		double diveOffset = ReadDouble(config(), "DiveOffset", 650.0);
 		double pullLeadDistance = ReadDouble(config(), "PullLeadDistance", 1200.0);
 		double minAltitude = ReadDouble(config(), "MinAltitude", 1300.0);
-		Vector3 toTarget = TargetDirection(BB);
+		Vector3 toTarget = TargetDirection(BB); // 나->적 벡터
 		Vector3 targetLead = BB->TargetLocaion_Cartesian + TargetForward(BB) * pullLeadDistance;
 		Vector3 vp = targetLead + toTarget * 900.0 - WorldUp() * diveOffset;
 		if (BB->MyLocation_Cartesian.Z < minAltitude + 500.0)
@@ -318,7 +324,7 @@ namespace Action
 			vp.Z = std::max(vp.Z, minAltitude + 500.0);
 		}
 
-		SetCommand(BB, vp, 1.0f);
+		SetCommand(BB, vp, 1.0f); // 적이 가게 될 위치(targetLead)보다 조금 낮게, 적에게 더 가깝게 vp설정
 		return NodeStatus::SUCCESS;
 	}
 

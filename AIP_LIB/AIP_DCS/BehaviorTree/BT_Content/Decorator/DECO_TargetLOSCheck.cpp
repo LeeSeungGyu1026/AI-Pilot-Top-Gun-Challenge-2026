@@ -19,7 +19,7 @@ namespace Action
 		Optional<std::string> UpOrDown = getInput<std::string>("UpDown");
 		Optional<std::string> Los = getInput<std::string>("InputLOS");
 
-		float currentLOS = (*BB)->Los_Degree_Target;
+		float currentLOS = (*BB)->Los_Degree_Target; // 나 - 타겟시선방향
 		std::string compareMode = UpOrDown.value();
 		float inputLOS = std::stof(Los.value());
 
