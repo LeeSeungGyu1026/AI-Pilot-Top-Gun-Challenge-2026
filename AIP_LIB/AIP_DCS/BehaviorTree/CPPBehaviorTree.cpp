@@ -86,7 +86,7 @@ void UCPPBehaviorTree::init()
 
 
 	//파일로 트리 구조 정의
-	//커스텀 규칙 XML은 Rule.xml을 우선 사용하고, 없으면 기존 Rule_forTraining.xml을 사용한다
+	//커스텀 규칙 XML은 Rule.xml을 우선 사용하고, 없으면 기존 Rule_forTraining.xml을 사용
 	std::string rulePath = "./Rule.xml";
 	std::ifstream ruleFile(rulePath.c_str());
 	if (!ruleFile.good())

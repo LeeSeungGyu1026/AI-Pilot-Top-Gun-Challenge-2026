@@ -103,6 +103,14 @@ NodeStatus Action::Task_Empty::tick()
 		vp = base + right * std::cos(theta) * radius + forward * std::sin(theta) * radius;
 		vp.Z = base.Z;
 	}
+	else if (pattern == "CircleVertical")
+	{
+		double t = std::max(0.0, blackboard->RunningTime * speed);
+		double theta = t * 0.8;
+		// Vertical circle in plane (forward, up)
+		Vector3 up = SafeDirection(blackboard->MyUpVector, Vector3(0.0, 0.0, 1.0));
+		vp = base + forward * std::cos(theta) * radius + up * std::sin(theta) * radius;
+	}
 	else
 	{
 		vp = base + forward * std::max(1000.0, radius * 2.0);

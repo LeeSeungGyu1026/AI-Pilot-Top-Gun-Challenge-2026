@@ -7,7 +7,8 @@
       <CheckSight name="CheckSight" BB="{BB}"/>
       <AngleOffUpdate name="AngleOffUpdate" BB="{BB}"/>
       <AspectAngleUpdate name="AspectAngleUpdate" BB="{BB}"/>
-      <Task_Empty name="CirclePattern" BB="{BB}" Pattern="Circle" Radius="1800" Speed="1.0"/>
+      <!-- Vertical circle around forward-up plane -->
+      <Task_Empty name="CirclePatternVertical" BB="{BB}" Pattern="CircleVertical" Radius="1800" Speed="1.0"/>
     </Sequence>
   </BehaviorTree>
 </root>
