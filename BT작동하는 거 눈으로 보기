@@ -1,0 +1,17 @@
+conda activate aip
+cd C:\Users\user\Desktop\aip\AI-Pilot-Top-Gun-Challenge-2026\AIP_LIB\DogFightEnv\Release
+python -m pip install -r requirements.txt
+# 이 위에는 그냥 김해창이 보기 위함
+
+Rule.xml 옆에 있는 애들 덮어쓰기 해도 되고, 실행명령어에서 경로 설정해도 됨
+
+cd "C:\Users\user\Desktop\aip\AI-Pilot-Top-Gun-Challenge-2026\AIP_LIB\DogFightEnv\Release"
+
+python run_unreal_inference.py `
+  --mode bt `
+  --team-name team01 `
+  --server-ip 127.0.0.1 `
+  --server-port 9999 `
+  --bt-dll .\AIP_BASE.dll `
+  --bt-rule-xml "C:\Users\user\Desktop\aip\AI-Pilot-Top-Gun-Challenge-2026\AIP_LIB\Rule_Circle_Horizontal.xml" `
+  --packet-monitor
