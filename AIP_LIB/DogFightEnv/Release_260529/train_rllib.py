@@ -28,6 +28,7 @@ from dogfight.ai.checkpoint_io import (
     apply_lightweight_policy_bundle,
     save_lightweight_policy_bundle,
 )
+from dogfight.ai.bt_rule_manager import activate_rule_xml
 from dogfight.ai.dashboard_logger import (
     DashboardJsonlLogger,
     copy_experiment_yaml,
@@ -534,6 +535,14 @@ def parse_args():
         choices=["behavior_tree", "fixed", "loiter", "autopilot"],
     )
     parser.add_argument("--target-behavior-dll", default="AIP_BASE_target.dll")
+    parser.add_argument(
+        "--bt-rule-xml",
+        default="",
+        help=(
+            "Optional BT Rule XML to activate as Rule_forTraining.xml while "
+            "training runs. Relative paths are resolved from the Release root."
+        ),
+    )
     parser.add_argument(
         "--reward-module",
         default="",
@@ -1105,6 +1114,11 @@ def _run_with_tune(args, algorithm_name: str, config, env_config: dict) -> None:
 
 def main():
     args = parse_args()
+    with activate_rule_xml(args.bt_rule_xml, ROOT):
+        return _main(args)
+
+
+def _main(args):
     algorithm_name = normalize_algorithm_name(args.algorithm)
     if args.use_tune and (args.restore_checkpoint or args.init_bundle):
         raise RuntimeError(

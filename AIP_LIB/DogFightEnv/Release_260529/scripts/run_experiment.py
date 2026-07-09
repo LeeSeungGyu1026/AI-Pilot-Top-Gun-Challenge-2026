@@ -77,6 +77,7 @@ def build_argv(exp: dict[str, Any], exp_path: Path) -> tuple[Path, list[str]]:
     _add_optional(argv, "--observation-mode", env, "observation_mode")
     _add_optional(argv, "--observation-module", env, "observation_module")
     _add_optional(argv, "--target-behavior-dll", env, "target_behavior_dll")
+    _add_optional(argv, "--bt-rule-xml", env, "bt_rule_xml")
     _add_optional(argv, "--reward-module", env, "reward_module")
     if script_name != "train_curriculum":
         _add_optional(argv, "--target-mode", env, "target_mode")

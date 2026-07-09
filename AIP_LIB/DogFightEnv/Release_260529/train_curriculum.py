@@ -66,6 +66,7 @@ from dogfight.ai.checkpoint_io import (
     apply_lightweight_policy_bundle,
     save_lightweight_policy_bundle,
 )
+from dogfight.ai.bt_rule_manager import activate_rule_xml
 from dogfight.ai.engagement_replay_logger import EngagementReplayLogger
 from dogfight.ai.policy_probe_logger import PolicyProbeLogger
 from dogfight.ai.curriculum import (
@@ -147,6 +148,12 @@ def parse_args():
     p.add_argument("--observation-module", default="",
                    help="Optional module with custom observation size and build_observation(...).")
     p.add_argument("--target-behavior-dll", default="AIP_BASE_target.dll")
+    p.add_argument(
+        "--bt-rule-xml",
+        default="",
+        help=("Optional BT Rule XML to activate as Rule_forTraining.xml while "
+              "curriculum training runs. Relative paths are resolved from the Release root."),
+    )
     p.add_argument("--lr",                type=float, default=3e-4)
     p.add_argument("--gamma",             type=float, default=0.99)
     p.add_argument("--train-batch-size",  type=int,   default=4096)
@@ -1126,6 +1133,11 @@ def _now() -> str:
 
 def main():
     args = parse_args()
+    with activate_rule_xml(args.bt_rule_xml, ROOT):
+        return _main(args)
+
+
+def _main(args):
     _sync_lstm_args_from_init_bundle(args)
     trainer = CurriculumTrainer(args)
     trainer.run()

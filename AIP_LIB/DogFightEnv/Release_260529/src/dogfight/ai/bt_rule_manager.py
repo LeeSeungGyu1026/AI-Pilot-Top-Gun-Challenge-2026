@@ -9,6 +9,7 @@ from typing import NoReturn
 
 
 RULE_XML_NAME = "Rule_forTraining.xml"
+PREFERRED_RULE_XML_NAME = "Rule.xml"
 
 
 def _exit_with_rule_xml_error(message: str) -> NoReturn:
@@ -64,27 +65,40 @@ def activate_rule_xml(
     workspace_root = Path(workspace_root).resolve()
     source = _resolve_rule_xml_source(rule_xml_path, workspace_root)
 
-    target = workspace_root / RULE_XML_NAME
-    if source == target.resolve():
-        # 2026-05-26: Log the exact XML path consumed by the native BT DLL.
-        print(
-            f"[bt_rule_manager] active Rule XML already in place: {target}",
-            file=sys.stderr,
-        )
-        yield
-        return
+    # The native C++ BT tries ./Rule.xml first and only falls back to
+    # ./Rule_forTraining.xml. Keep both names synchronized during the run so a
+    # stale Rule.xml cannot silently override the requested experiment rule.
+    targets = [
+        workspace_root / RULE_XML_NAME,
+        workspace_root / PREFERRED_RULE_XML_NAME,
+    ]
+    backups: list[tuple[Path, Path | None]] = []
+    activated_targets: list[Path] = []
+    for target in targets:
+        target = target.resolve()
+        if source == target:
+            backups.append((target, None))
+            activated_targets.append(target)
+            continue
+        backup = None
+        if target.exists():
+            backup = target.with_name(f"{target.name}.bak")
+            shutil.copy2(target, backup)
+        shutil.copy2(source, target)
+        backups.append((target, backup))
+        activated_targets.append(target)
 
-    backup = None
-    if target.exists():
-        backup = target.with_suffix(".xml.bak")
-        shutil.copy2(target, backup)
-
-    shutil.copy2(source, target)
-    # 2026-05-26: Make XML activation explicit for DLL/cwd mismatch diagnosis.
-    print(f"[bt_rule_manager] activated Rule XML: {source} -> {target}", file=sys.stderr)
+    print(
+        "[bt_rule_manager] activated Rule XML: "
+        f"{source} -> {', '.join(str(path) for path in activated_targets)}",
+        file=sys.stderr,
+    )
     try:
         yield
     finally:
-        if backup and backup.exists():
-            shutil.copy2(backup, target)
-            backup.unlink()
+        for target, backup in reversed(backups):
+            if backup and backup.exists():
+                shutil.copy2(backup, target)
+                backup.unlink()
+            elif source != target and target.exists():
+                target.unlink()

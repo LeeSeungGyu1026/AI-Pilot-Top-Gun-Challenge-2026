@@ -7,7 +7,7 @@
     <latitude unit="DEG">37.24078</latitude>
     <longitude unit="DEG">131.86955</longitude>
     <phi unit="DEG">0</phi>
-    <psi unit="DEG">0</psi>
+    <psi unit="DEG">-90</psi>
     <beta unit="DEG">0</beta>
     <alpha unit="DEG">0</alpha>
 </initialize>

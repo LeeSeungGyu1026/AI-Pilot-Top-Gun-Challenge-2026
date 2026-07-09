@@ -24,7 +24,8 @@ env:
   observation_mode: tactical16
   # observation_module: student.my_observation
   target_mode: behavior_tree
-  target_behavior_dll: AIP_BASE_target.dll
+  target_behavior_dll: AIP_BASE_target_circle_debug.dll
+  bt_rule_xml: ..\..\Rule_Circle_Horizontal.xml
   # reward_module: student.my_reward
   max_engage_time: 60.0
   episode_step_limit: 3600
