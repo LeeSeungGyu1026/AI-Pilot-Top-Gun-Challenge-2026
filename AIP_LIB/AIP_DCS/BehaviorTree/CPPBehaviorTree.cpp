@@ -238,6 +238,13 @@ StickValue UCPPBehaviorTree::Step(PlaneInfo MyInfo, int NumofOtherPlane, PlaneIn
 				BB->MyRotation_EDegree.Pitch * DEG2RAD,
 				BB->MyRotation_EDegree.Yaw * DEG2RAD),
 			VP);
+
+		if (BB->ControlOverrideEnabled)
+		{
+			R.RollCMD = BB->OverrideRollCMD;
+			R.PitchCMD = BB->OverridePitchCMD;
+			R.RudderCMD = BB->OverrideRudderCMD;
+		}
 		
 		return R;
 	}
@@ -256,6 +263,10 @@ Vector3 UCPPBehaviorTree::GetVP()
 	
 	BB->RunningTime += BB->DeltaSecond;	//시뮬레이선 타임에 따른 델타 타임 설정
 	BB->Throttle = 1.0f;
+	BB->ControlOverrideEnabled = false;
+	BB->OverrideRollCMD = 0.0f;
+	BB->OverridePitchCMD = 0.0f;
+	BB->OverrideRudderCMD = 0.0f;
 	tree.tickRoot(); //트리 작동
 
 	VP = BB->VP_Cartesian;	// VP 값

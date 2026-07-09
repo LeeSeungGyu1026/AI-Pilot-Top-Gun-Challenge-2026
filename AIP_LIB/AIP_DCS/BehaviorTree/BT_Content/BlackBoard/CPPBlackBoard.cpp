@@ -13,6 +13,12 @@ CPPBlackBoard::CPPBlackBoard()
 	MyUpVector		= Vector3(0, 0, 0);
 	MyRightVector	= Vector3(0, 0, 0);
 
+	PatternAnchorInitialized = false;
+	PatternOrigin_Cartesian = Vector3(0, 0, 0);
+	PatternForwardVector = Vector3(0, 0, 0);
+	PatternUpVector = Vector3(0, 0, 0);
+	PatternRightVector = Vector3(0, 0, 0);
+
 	TargetForwardVector = Vector3(0, 0, 0);
 	TargetUpVector		= Vector3(0, 0, 0);
 	TargetRightVector	= Vector3(0, 0, 0);
@@ -25,6 +31,10 @@ CPPBlackBoard::CPPBlackBoard()
 
 	Distance = 0;
 	Throttle = 0;
+	ControlOverrideEnabled = false;
+	OverrideRollCMD = 0;
+	OverridePitchCMD = 0;
+	OverrideRudderCMD = 0;
 
 
 	Los_Degree = 0;

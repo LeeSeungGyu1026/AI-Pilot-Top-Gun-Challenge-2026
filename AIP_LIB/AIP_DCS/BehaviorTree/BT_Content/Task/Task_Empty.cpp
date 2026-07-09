@@ -60,7 +60,7 @@ NodeStatus Action::Task_Empty::tick()
 	std::string pattern = patternInput.value_or("Straight");
 	double radius = ReadDouble(config(), "Radius", 1800.0);
 	double speed = ReadDouble(config(), "Speed", 1.0);
-	if (!radiusInput->empty())
+	if (radiusInput && !radiusInput.value().empty())
 	{
 		try
 		{
@@ -70,7 +70,7 @@ NodeStatus Action::Task_Empty::tick()
 		{
 		}
 	}
-	if (!speedInput->empty())
+	if (speedInput && !speedInput.value().empty())
 	{
 		try
 		{
@@ -81,44 +81,79 @@ NodeStatus Action::Task_Empty::tick()
 		}
 	}
 
-	Vector3 base = blackboard->MyLocation_Cartesian;
+	radius = std::max(300.0, radius);
+	speed = std::max(0.05, speed);
+
+	Vector3 current = blackboard->MyLocation_Cartesian;
 	Vector3 forward = SafeDirection(blackboard->MyForwardVector, Vector3(1.0, 0.0, 0.0));
 	Vector3 right = SafeDirection(blackboard->MyRightVector, Vector3(0.0, 1.0, 0.0));
-	Vector3 vp = base;
-	vp.Z = base.Z;
+	Vector3 up = SafeDirection(blackboard->MyUpVector, Vector3(0.0, 0.0, 1.0));
+
+	if (!blackboard->PatternAnchorInitialized)
+	{
+		blackboard->PatternAnchorInitialized = true;
+		blackboard->PatternOrigin_Cartesian = current;
+		blackboard->PatternForwardVector = forward;
+		blackboard->PatternRightVector = right;
+		blackboard->PatternUpVector = up;
+	}
+
+	Vector3 origin = blackboard->PatternOrigin_Cartesian;
+	Vector3 anchorForward = SafeDirection(blackboard->PatternForwardVector, forward);
+	Vector3 anchorRight = SafeDirection(blackboard->PatternRightVector, right);
+	Vector3 anchorUp = SafeDirection(blackboard->PatternUpVector, up);
+	Vector3 vp = current;
+	const double t = std::max(0.0, blackboard->RunningTime * speed);
+	float rollCmd = 0.0f;
+	float pitchCmd = 0.0f;
+	float rudderCmd = 0.0f;
 
 	if (pattern == "Figure8")
 	{
-		double t = std::max(0.0, blackboard->RunningTime * speed);
-		double phase = t;
+		double phase = t * 0.65;
 		double x = std::sin(phase) * radius;
 		double y = std::sin(phase * 2.0) * (radius * 0.45);
-		vp = base + right * x + forward * y;
-		vp.Z = base.Z;
+		double lead = std::max(900.0, radius * 0.65);
+		vp = origin + anchorRight * x + anchorForward * (y + lead);
+		vp.Z = origin.Z;
+		rollCmd = (float)(std::sin(phase) * 0.90);
+		pitchCmd = -0.80f;
+		rudderCmd = (float)(-std::sin(phase) * 0.25);
 	}
 	else if (pattern == "Circle")
 	{
-		double t = std::max(0.0, blackboard->RunningTime * speed);
-		double theta = t * 0.8;
-		vp = base + right * std::cos(theta) * radius + forward * std::sin(theta) * radius;
-		vp.Z = base.Z;
+		double theta = 0.75 + t * 0.45;
+		Vector3 center = origin + anchorRight * radius;
+		vp = center + anchorRight * (-std::cos(theta) * radius) + anchorForward * (std::sin(theta) * radius);
+		vp.Z = origin.Z;
+		rollCmd = 1.00f;
+		pitchCmd = -1.00f;
+		rudderCmd = -0.15f;
 	}
 	else if (pattern == "CircleVertical")
 	{
-		double t = std::max(0.0, blackboard->RunningTime * speed);
-		double theta = t * 0.8;
-		// Vertical circle in plane (forward, up)
-		Vector3 up = SafeDirection(blackboard->MyUpVector, Vector3(0.0, 0.0, 1.0));
-		vp = base + forward * std::cos(theta) * radius + up * std::sin(theta) * radius;
+		double theta = 0.65 + t * 0.35;
+		Vector3 center = origin + anchorUp * radius;
+		vp = center + anchorUp * (-std::cos(theta) * radius) + anchorForward * (std::sin(theta) * radius);
+		rollCmd = 0.0f;
+		pitchCmd = -1.00f;
+		rudderCmd = 0.0f;
 	}
 	else
 	{
-		vp = base + forward * std::max(1000.0, radius * 2.0);
-		vp.Z = base.Z;
+		vp = current + forward * std::max(1500.0, radius * 2.0);
+		vp.Z = current.Z;
+		rollCmd = 0.0f;
+		pitchCmd = 0.0f;
+		rudderCmd = 0.0f;
 	}
 
 	blackboard->VP_Cartesian = vp;
 	blackboard->Throttle = 1.0f;
+	blackboard->ControlOverrideEnabled = true;
+	blackboard->OverrideRollCMD = rollCmd;
+	blackboard->OverridePitchCMD = pitchCmd;
+	blackboard->OverrideRudderCMD = rudderCmd;
 
 	return NodeStatus::SUCCESS;
 }

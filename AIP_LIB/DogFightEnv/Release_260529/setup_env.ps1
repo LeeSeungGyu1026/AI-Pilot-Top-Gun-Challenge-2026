@@ -7,13 +7,71 @@
 param([switch]$Cpu)
 
 $ErrorActionPreference = "Stop"
-$conda = "$env:LOCALAPPDATA\miniconda3\Scripts\conda.exe"
-$envPy = "$env:LOCALAPPDATA\miniconda3\envs\aip\python.exe"
+
+function Resolve-CondaExe {
+    $candidates = @(
+        "$env:USERPROFILE\miniconda3\Scripts\conda.exe",
+        "$env:LOCALAPPDATA\miniconda3\Scripts\conda.exe",
+        "$env:USERPROFILE\anaconda3\Scripts\conda.exe",
+        "$env:LOCALAPPDATA\anaconda3\Scripts\conda.exe"
+    )
+    foreach ($candidate in $candidates) {
+        if ($candidate -and (Test-Path $candidate)) {
+            return (Resolve-Path $candidate).Path
+        }
+    }
+
+    $fromPath = Get-Command conda.exe -ErrorAction SilentlyContinue
+    if ($fromPath) {
+        return $fromPath.Source
+    }
+
+    return "$env:LOCALAPPDATA\miniconda3\Scripts\conda.exe"
+}
+
+function Resolve-CondaEnvPython([string]$CondaExe, [string]$EnvName) {
+    $envList = & $CondaExe env list 2>$null
+    foreach ($line in $envList) {
+        $trimmed = $line.Trim()
+        if (-not $trimmed -or $trimmed.StartsWith("#")) {
+            continue
+        }
+
+        $parts = $trimmed -split "\s+"
+        if ($parts.Count -ge 2 -and $parts[0] -eq $EnvName) {
+            $pathIndex = 1
+            if ($parts[$pathIndex] -eq "*") {
+                $pathIndex++
+            }
+            if ($parts.Count -le $pathIndex) {
+                continue
+            }
+
+            $envPath = $parts[$pathIndex]
+            $python = Join-Path $envPath "python.exe"
+            if (Test-Path $python) {
+                return (Resolve-Path $python).Path
+            }
+        }
+    }
+    return ""
+}
+
+$conda = Resolve-CondaExe
+$envPy = ""
+if (Test-Path $conda) {
+    $envPy = Resolve-CondaEnvPython $conda "aip"
+}
+if (-not $envPy) {
+    $condaRoot = Split-Path (Split-Path $conda -Parent) -Parent
+    $envPy = Join-Path $condaRoot "envs\aip\python.exe"
+}
 
 # 1) Miniconda (user scope)
 if (-not (Test-Path $conda)) {
     Write-Host "[1/4] Installing Miniconda3 (user scope) via winget..."
     winget install -e --id Anaconda.Miniconda3 --scope user --accept-package-agreements --accept-source-agreements --silent
+    $conda = Resolve-CondaExe
     & $conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
     & $conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
     & $conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/msys2
@@ -25,6 +83,7 @@ if (-not (Test-Path $conda)) {
 if (-not (Test-Path $envPy)) {
     Write-Host "[2/4] Creating conda env 'aip' (python 3.11)..."
     & $conda create -n aip python=3.11 -y
+    $envPy = Resolve-CondaEnvPython $conda "aip"
 } else {
     Write-Host "[2/4] Conda env 'aip' already exists."
 }

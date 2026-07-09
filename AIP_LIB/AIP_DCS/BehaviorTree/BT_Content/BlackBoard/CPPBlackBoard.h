@@ -110,6 +110,12 @@ public:
 	Vector3 MyUpVector;										//내 업 방향 벡터
 	Vector3 MyRightVector;									//내 오른쪽 방향 벡터
 
+	bool PatternAnchorInitialized;
+	Vector3 PatternOrigin_Cartesian;
+	Vector3 PatternForwardVector;
+	Vector3 PatternUpVector;
+	Vector3 PatternRightVector;
+
 	Vector3 TargetForwardVector;							//타겟 적기 전방 방향 벡터
 	Vector3 TargetUpVector;									//타겟 적기 업 방향 벡터
 	Vector3 TargetRightVector;								//타겟 적기 오른쪽 방향 벡터
@@ -124,6 +130,10 @@ public:
 
 	float Distance;											//타겟 적기와의 거리, meter
 	float Throttle;											//Throttle, 0~1
+	bool ControlOverrideEnabled;
+	float OverrideRollCMD;
+	float OverridePitchCMD;
+	float OverrideRudderCMD;
 	
 
 	float Los_Degree;										//타겟에 대한 LOS값

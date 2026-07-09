@@ -15,3 +15,28 @@ python run_unreal_inference.py `
   --bt-dll .\AIP_BASE.dll `
   --bt-rule-xml "C:\Users\user\Desktop\aip\AI-Pilot-Top-Gun-Challenge-2026\AIP_LIB\Rule_Circle_Horizontal.xml" `
   --packet-monitor
+
+
+  cd AIP_LIB\DogFightEnv\Release_260529
+python run_unreal_inference.py --mode bt --bt-dll AIP_BASE.dll --bt-rule-xml ..\..\Rule_default.xml --team-name team01 --server-ip 192.168.10.115 --server-port 9999 --action-repeat 6
+
+
+cd C:\Users\biobe\desktop\aip\AI-Pilot-Top-Gun-Challenge-2026\AIP_LIB\DogFightEnv\Release_260529
+python run_unreal_inference.py --mode bt --bt-dll AIP_BASE.dll --bt-rule-xml "C:\Users\biobe\desktop\aip\AI-Pilot-Top-Gun-Challenge-2026\AIP_LIB\Rule_default.xml"  --team-name team01  --server-ip 127.0.0.1  --server-port 9999 --packet-monitor  --action-repeat 6
+
+
+python run_unreal_inference.py --mode bt --bt-dll AIP_BASE_target.dll --bt-rule-xml "..\..\Rule_default.xml" --team-name team01 --server-ip 127.0.0.1 --server-port 9999 --packet-monitor --action-repeat 6
+
+python run_unreal_inference.py --mode bt --bt-dll AIP_BASE_target.dll --bt-rule-xml "..\..\Rule_Circle_Horizontal.xml" --team-name team01 --server-ip 127.0.0.1 --server-port 9999 --packet-monitor --action-repeat 6
+
+python run_unreal_inference.py --mode bt --bt-dll AIP_BASE_target_circle_debug.dll --bt-rule-xml "..\..\Rule_Circle_Horizontal.xml" --team-name team01 --server-ip 127.0.0.1 --server-port 9999 --packet-monitor --action-repeat 6 --ai-type rule
+
+
+python run_unreal_inference.py --mode bt --bt-dll AIP_BASE_target_circle_debug.dll --bt-rule-xml "..\..\Rule_Circle_Horizontal.xml" --team-name team01 --server-ip 127.0.0.1 --server-port 9999 --packet-monitor --action-repeat 1 --ai-type rule
+
+
+
+
+
+cd C:\Users\biobe\desktop\aip\AI-Pilot-Top-Gun-Challenge-2026\AIP_LIB\DogFightEnv\Release_260529
+C:\Users\biobe\miniconda3\envs\aip\python.exe run_unreal_inference.py --mode bt --bt-dll AIP_BASE_target.dll --bt-rule-xml "..\..\Rule_default.xml" --team-name team01 --server-ip 127.0.0.1 --server-port 9999 --packet-monitor --action-repeat 6
