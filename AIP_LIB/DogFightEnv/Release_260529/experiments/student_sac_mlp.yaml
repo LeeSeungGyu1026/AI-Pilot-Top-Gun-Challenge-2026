@@ -35,6 +35,8 @@ env:
 # - target_loiter/autopilot, reward, wez, initial_scenario 같은 세부 값을 여기서 조정한다.
 env_config:
   step_ratio: 6
+  action_slew_limit: 0.04
+  action_abs_limit: [0.45, 0.35, 0.35, 1.0]
   wez:
     angle_deg: 2.0
     min_range_m: 152.4
@@ -107,8 +109,8 @@ policy_probe:
   print: true
 
 engagement_log:
-  enabled: false
-  interval: 10
+  enabled: true
+  interval: 1
   steps: 600
   episodes: 1
   print: true

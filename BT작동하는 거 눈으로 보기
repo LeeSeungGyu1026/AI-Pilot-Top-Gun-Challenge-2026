@@ -41,37 +41,5 @@ python run_unreal_inference.py --mode bt --bt-dll AIP_BASE_target_circle_debug.d
 cd C:\Users\biobe\desktop\aip\AI-Pilot-Top-Gun-Challenge-2026\AIP_LIB\DogFightEnv\Release_260529
 C:\Users\biobe\miniconda3\envs\aip\python.exe run_unreal_inference.py --mode bt --bt-dll AIP_BASE_target.dll --bt-rule-xml "..\..\Rule_default.xml" --team-name team01 --server-ip 127.0.0.1 --server-port 9999 --packet-monitor --action-repeat 6
 
-python run_unreal_inference.py --mode bt --bt-dll AIP_BASE_target.dll --bt-rule-xml "..\..\Rule_default.xml" --team-name team01 --server-ip 127.0.0.1 --server-port 9999 --packet-monitor --action-repeat 6
 
-cd C:\Users\user\Desktop\aip\AI-Pilot-Top-Gun-Challenge-2026\AIP_LIB\DogFightEnv\Release_260529
-
-python run_unreal_inference.py --mode bt --bt-dll AIP_BASE_target.dll --bt-rule-xml "..\..\Rule_default.xml" --team-name team01 --server-ip 127.0.0.1 --server-port 9999 --packet-monitor --action-repeat 6 --ai-type rule
-
-cd C:\Users\user\Desktop\aip\AI-Pilot-Top-Gun-Challenge-2026\AIP_LIB\DogFightEnv\Release_260529
-python run_unreal_inference.py --mode bt --bt-dll AIP_BASE_target_circle_debug.dll --bt-rule-xml "..\..\Rule_Circle_Horizontal.xml" --team-name team01 --server-ip 127.0.0.1 --server-port 9999 --packet-monitor --action-repeat 1 --debug-action-repeat --ai-type rule
-
-
-그냥 unreal이랑 연동하는 거 포기
-
-학습에서 저장되는 로그로 봐야할듯
-cd Desktop\aip\AI-Pilot-Top-Gun-Challenge-2026\AIP_LIB\DogFightEnv\Release_260529
-
-
-실험 yaml에 
-env:
-  target_mode: behavior_tree
-  target_behavior_dll: AIP_BASE_target_circle_debug.dll
-  bt_rule_xml: ..\..\Rule_Circle_Horizontal.xml
-
-  원하는 거 넣고
-
-cd C:\Users\user\Desktop\aip\AI-Pilot-Top-Gun-Challenge-2026\AIP_LIB\DogFightEnv\Release_260529
-python scripts\run_experiment.py experiments\your_experiment.yaml --dry-run
-python scripts\run_experiment.py experiments\your_experiment.yaml
-밑에 글자 떠야함
-[bt_rule_manager] activated Rule XML: ...Rule_Circle_Horizontal.xml -> ...Rule_forTraining.xml, ...Rule.xml
-
-# 문법 검사
-python -m py_compile scripts\run_experiment.py train_rllib.py train_curriculum.py src\dogfight\ai\bt_rule_manager.py
-# 실험 실행
-python scripts\run_experiment.py experiments\student_sac_mlp.yaml --dry-run
+c:\Users\biobe\desktop\BattleServer_V0.2\DogFightViewer c:\Users\biobe\desktop\BattleServer_V0.2\Engine c:\Users\biobe\desktop\BattleServer_V0.2\DogFightViewer.exe c:\Users\biobe\desktop\BattleServer_V0.2\Manifest_NonUFSFiles_Win64.txt c:\Users\biobe\desktop\BattleServer_V0.2\Manifest_UFSFiles_Win64.txt

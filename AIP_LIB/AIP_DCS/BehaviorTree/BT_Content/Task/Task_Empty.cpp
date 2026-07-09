@@ -37,6 +37,46 @@ namespace
 			return defaultValue;
 		}
 	}
+
+	double ClampDouble(double value, double minValue, double maxValue)
+	{
+		return std::max(minValue, std::min(maxValue, value));
+	}
+
+	double NormalizeDegrees(double degrees)
+	{
+		while (degrees > 180.0)
+		{
+			degrees -= 360.0;
+		}
+		while (degrees < -180.0)
+		{
+			degrees += 360.0;
+		}
+		return degrees;
+	}
+
+	float BankHoldCommand(double currentRollDeg, double desiredRollDeg)
+	{
+		const double errorDeg = NormalizeDegrees(desiredRollDeg - currentRollDeg);
+		return static_cast<float>(ClampDouble(errorDeg * 0.035, -0.45, 0.45));
+	}
+
+	float AltitudeHoldPitch(double currentAltitude, double desiredAltitude, double basePitch)
+	{
+		const double altitudeError = desiredAltitude - currentAltitude;
+		const double correction = ClampDouble(altitudeError / 1400.0, -0.26, 0.42);
+		return static_cast<float>(ClampDouble(basePitch - correction, -0.60, 0.18));
+	}
+
+	double CircleBankDegrees(double speedMps, double radiusMeters)
+	{
+		const double gravity = 9.80665;
+		const double safeSpeed = std::max(120.0, speedMps);
+		const double safeRadius = std::max(900.0, radiusMeters);
+		const double bankRadians = std::atan((safeSpeed * safeSpeed) / (gravity * safeRadius));
+		return ClampDouble(bankRadians * 180.0 / 3.14159265358979323846, 45.0, 72.0);
+	}
 }
 
 PortsList Action::Task_Empty::providedPorts()
@@ -88,6 +128,7 @@ NodeStatus Action::Task_Empty::tick()
 	Vector3 forward = SafeDirection(blackboard->MyForwardVector, Vector3(1.0, 0.0, 0.0));
 	Vector3 right = SafeDirection(blackboard->MyRightVector, Vector3(0.0, 1.0, 0.0));
 	Vector3 up = SafeDirection(blackboard->MyUpVector, Vector3(0.0, 0.0, 1.0));
+	const double ownSpeed = std::max(120.0f, blackboard->MySpeed_MS);
 
 	if (!blackboard->PatternAnchorInitialized)
 	{
@@ -104,9 +145,13 @@ NodeStatus Action::Task_Empty::tick()
 	Vector3 anchorUp = SafeDirection(blackboard->PatternUpVector, up);
 	Vector3 vp = current;
 	const double t = std::max(0.0, blackboard->RunningTime * speed);
+	const double currentRollDeg = blackboard->MyRotation_EDegree.Roll;
+	const double patternAltitude = origin.Z;
 	float rollCmd = 0.0f;
 	float pitchCmd = 0.0f;
 	float rudderCmd = 0.0f;
+	float throttleCmd = 1.0f;
+	bool useDirectPatternControl = true;
 
 	if (pattern == "Figure8")
 	{
@@ -116,9 +161,10 @@ NodeStatus Action::Task_Empty::tick()
 		double lead = std::max(900.0, radius * 0.65);
 		vp = origin + anchorRight * x + anchorForward * (y + lead);
 		vp.Z = origin.Z;
-		rollCmd = (float)(std::sin(phase) * 0.90);
-		pitchCmd = -0.80f;
-		rudderCmd = (float)(-std::sin(phase) * 0.25);
+		double desiredBank = std::sin(phase) * 28.0;
+		rollCmd = BankHoldCommand(currentRollDeg, desiredBank);
+		pitchCmd = AltitudeHoldPitch(current.Z, patternAltitude, -0.06);
+		rudderCmd = static_cast<float>(ClampDouble(-std::sin(phase) * 0.08, -0.12, 0.12));
 	}
 	else if (pattern == "Circle")
 	{
@@ -126,31 +172,35 @@ NodeStatus Action::Task_Empty::tick()
 		Vector3 center = origin + anchorRight * radius;
 		vp = center + anchorRight * (-std::cos(theta) * radius) + anchorForward * (std::sin(theta) * radius);
 		vp.Z = origin.Z;
-		rollCmd = 1.00f;
-		pitchCmd = -1.00f;
-		rudderCmd = -0.15f;
+		const double desiredBank = CircleBankDegrees(ownSpeed, radius);
+		rollCmd = BankHoldCommand(currentRollDeg, desiredBank);
+		pitchCmd = AltitudeHoldPitch(current.Z, patternAltitude, -0.24);
+		rudderCmd = -0.06f;
+		throttleCmd = 0.56f;
 	}
 	else if (pattern == "CircleVertical")
 	{
 		double theta = 0.65 + t * 0.35;
 		Vector3 center = origin + anchorUp * radius;
 		vp = center + anchorUp * (-std::cos(theta) * radius) + anchorForward * (std::sin(theta) * radius);
-		rollCmd = 0.0f;
-		pitchCmd = -1.00f;
+		useDirectPatternControl = false;
+		rollCmd = BankHoldCommand(currentRollDeg, 0.0);
+		pitchCmd = static_cast<float>(ClampDouble(-std::sin(theta) * 0.28, -0.35, 0.20));
 		rudderCmd = 0.0f;
+		throttleCmd = 1.0f;
 	}
 	else
 	{
 		vp = current + forward * std::max(1500.0, radius * 2.0);
 		vp.Z = current.Z;
-		rollCmd = 0.0f;
-		pitchCmd = 0.0f;
+		rollCmd = BankHoldCommand(currentRollDeg, 0.0);
+		pitchCmd = AltitudeHoldPitch(current.Z, patternAltitude, 0.0);
 		rudderCmd = 0.0f;
 	}
 
 	blackboard->VP_Cartesian = vp;
-	blackboard->Throttle = 1.0f;
-	blackboard->ControlOverrideEnabled = true;
+	blackboard->Throttle = throttleCmd;
+	blackboard->ControlOverrideEnabled = useDirectPatternControl;
 	blackboard->OverrideRollCMD = rollCmd;
 	blackboard->OverridePitchCMD = pitchCmd;
 	blackboard->OverrideRudderCMD = rudderCmd;

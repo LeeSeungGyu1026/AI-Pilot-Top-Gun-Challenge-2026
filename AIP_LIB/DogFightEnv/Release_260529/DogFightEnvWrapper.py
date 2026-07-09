@@ -50,6 +50,9 @@ class DogFightWrapper(DogFightEnv):
             observation_high=observation_high,
         )
         self._action_slew_limit = float(self.config.get("action_slew_limit", 0.0))
+        self._action_abs_limit = self._resolve_action_abs_limit(
+            self.config.get("action_abs_limit", 0.0)
+        )
         self._prev_action = None
         self._saddle_rng = np.random.default_rng()
         # Range-discipline: end the "extend to infinity" exploit early so the
@@ -69,6 +72,22 @@ class DogFightWrapper(DogFightEnv):
         self._weave_alt_base = float(_ap.get("altitude_cmd", -7000.0))
         self._weave_step = 0
         self._weave_active = True  # per-episode; may be disabled to fly straight
+
+    @staticmethod
+    def _resolve_action_abs_limit(value):
+        if value is None:
+            return None
+        if np.isscalar(value):
+            limit = float(value)
+            if limit <= 0.0:
+                return None
+            return np.full(4, limit, dtype=np.float32)
+        arr = np.asarray(value, dtype=np.float32)
+        if arr.size != 4:
+            raise ValueError("action_abs_limit must be a scalar or a 4-element list")
+        if np.any(arr <= 0.0):
+            raise ValueError("action_abs_limit values must be positive")
+        return arr
 
     def _place_offensive_saddle(self, cfg: dict) -> None:
         """Spawn the agent in an OFFENSIVE SADDLE: a few hundred metres behind a
@@ -209,8 +228,16 @@ class DogFightWrapper(DogFightEnv):
                 lo = self._prev_action - self._action_slew_limit
                 hi = self._prev_action + self._action_slew_limit
                 a = np.clip(a, lo, hi)
-            self._prev_action = a.copy()
             action = a
+
+        if self._action_abs_limit is not None:
+            action = np.clip(
+                np.asarray(action, dtype=np.float32),
+                -self._action_abs_limit,
+                self._action_abs_limit,
+            )
+        if self._action_slew_limit > 0.0:
+            self._prev_action = np.asarray(action, dtype=np.float32).copy()
 
         result = super().step(action)
         if self._rd_cfg.get("enabled") and isinstance(result, tuple) and len(result) == 5:
