@@ -9,6 +9,10 @@ from dogfight.ai.action_provider import ActionContext, ActionProvider, ActionRes
 from dogfight.ai.checkpoint_io import load_lightweight_policy_bundle
 
 
+RL_ACTION_LOW = np.array([-1.0, -1.0, -1.0, -1.0], dtype=np.float32)
+RL_ACTION_HIGH = np.ones(4, dtype=np.float32)
+
+
 class RLActionProvider(ActionProvider):
     def __init__(
         self,
@@ -19,11 +23,13 @@ class RLActionProvider(ActionProvider):
         explore: bool = False,
         obs_builder: Callable[[ActionContext], np.ndarray] | None = None,
         confidence: float = 0.9,
+        output_action_space: str = "sim",
     ):
         self.policy_id = policy_id
         self.explore = explore
         self.obs_builder = obs_builder
         self.confidence = confidence
+        self.output_action_space = output_action_space
         self._owns_algorithm = False
         self._module_state = None
         self._debug_lstm_io = False
@@ -77,13 +83,20 @@ class RLActionProvider(ActionProvider):
             observation = self.obs_builder(context)
 
         action = self._compute_module_action(observation)
-        action = clip_action(action)
+        if self.output_action_space == "rl":
+            action = _clip_rl_action(action)
+        else:
+            action = clip_action(action)
 
         return ActionResult(
             action=action,
             source="rl",
             confidence=self.confidence,
-            info={"policy_id": self.policy_id, "explore": self.explore},
+            info={
+                "policy_id": self.policy_id,
+                "explore": self.explore,
+                "action_space": self.output_action_space,
+            },
         )
 
     def close(self) -> None:
@@ -96,6 +109,20 @@ class RLActionProvider(ActionProvider):
         import torch
         from ray.rllib.core.columns import Columns
 
+        obs = np.asarray(observation, dtype=np.float32)
+        if hasattr(self.algorithm, "compute_single_action"):
+            try:
+                result = self.algorithm.compute_single_action(
+                    obs,
+                    policy_id=self.policy_id,
+                    explore=self.explore,
+                )
+                if isinstance(result, tuple):
+                    result = result[0]
+                return _to_numpy_action(result)
+            except Exception:
+                pass
+
         module = self.algorithm.get_module(self.policy_id)
         if module is None:
             module = self.algorithm.get_module()
@@ -105,7 +132,6 @@ class RLActionProvider(ActionProvider):
         self._debug_lstm_io = os.environ.get("DOGFIGHT_RNNSAC_DEBUG") == "1"
         self._ensure_module_state(module, torch)
 
-        obs = np.asarray(observation, dtype=np.float32)
         if self._module_state:
             # Recurrent RLModules expect obs as (B, T, obs_dim). This explicit
             # time axis is the inference-side mirror of replay sequence batches.
@@ -175,6 +201,12 @@ def _to_numpy_action(action) -> np.ndarray:
     while action_array.ndim > 1 and action_array.shape[0] == 1:
         action_array = action_array[0]
     return action_array
+
+
+def _clip_rl_action(action) -> np.ndarray:
+    action_array = np.asarray(action, dtype=np.float32)
+    action_array = np.nan_to_num(action_array, nan=0.0, posinf=0.0, neginf=0.0)
+    return np.clip(action_array, RL_ACTION_LOW, RL_ACTION_HIGH)
 
 
 def _batch_state(state, torch_module):

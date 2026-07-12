@@ -1,0 +1,317 @@
+수정은 가능하지만 몇 가지 계약을 반드시 맞춰야 해.
+핵심은 이거야.
+학습할 때 쓴 observation과 실행/제출할 때 쓴 observation이 같아야 함
+tactical16으로 학습한 모델은 tactical16 입력 16개를 기대함.
+student.my_observation으로 8개짜리 custom observation을 만들면, 그 모델은 8개 입력용으로 새로 학습해야 함.
+기존 tactical16 모델에 custom observation을 끼우면 입력 차원이 안 맞거나, 운 좋게 돌아도 의미가 깨짐.
+
+크기 선언과 실제 반환 길이가 같아야 함
+예를 들어 OBSERVATION_SIZE = 8이면 build_observation()도 정확히 8개짜리 벡터를 반환해야 해.
+
+값 범위가 관측공간 선언과 맞아야 함
+기본 tactical16은 대부분 [-1, 1]로 정규화돼 있음.
+custom observation도 가능하면 [-1, 1]로 normalize하는 게 안전해.
+너무 큰 원시값, 예를 들어 거리 12000m, 속도 300m/s를 그대로 넣으면 학습이 불안정해질 수 있음.
+
+매 step마다 항상 같은 순서와 의미여야 함
+0번은 거리였다가 다음 step에 속도고, 이런 식이면 안 됨.
+feature 순서가 바뀌면 policy 입장에서는 입력 언어가 계속 바뀌는 거라 학습이 망가짐.
+
+NaN, inf, None 나오면 안 됨
+관측값에 nan이나 inf가 섞이면 RLlib 학습이 터지거나 이상하게 학습됨.
+
+정리하면:
+observation은 네가 수정할 수 있다.
+하지만 “입력 벡터의 길이, 순서, 범위, 의미”를 고정된 규칙으로 설계해야 하고, 그 observation으로 처음부터 다시 학습해야 한다.
+
+초보 단계에서는 바로 observation을 바꾸기보다, 먼저 tactical16 그대로 두고 reward를 바꿔보는 게 더 안전해.
+
+오전 12:23
+
+
+
+
+
+
+그럼 tactical16에서는 내 위치, 적기와의 상대위치, ATA 등이 있고 적기의 orientation과 속도는 모르는 거지? 이걸 더 받을 수 있게 수정할 수 있어?
+
+
+
+
+오전 12:24
+
+
+
+
+
+
+9s 동안 작업
+
+
+
+맞아. tactical16 기준으로는 적기의 orientation과 속도는 직접 들어가지 않아.
+tactical16에 들어가는 건 대략 이거야:
+내 자세: roll, pitch, yaw
+내 속도: KCAS
+내 고도
+내 체력
+적기와의 상대 위치: delta_n, delta_e, delta_d
+기하 정보: ATA, AA, LOS azimuth, LOS elevation
+적기 체력
+내가 WEZ 안에 있는지
+pursuit score
+빠진 것:
+적기 roll
+적기 pitch
+적기 yaw
+적기 속도
+적기 고도 자체는 직접값은 없고, delta_d로 상대 고도만 있음
+다만 중요한 포인트가 하나 있어. AA, 즉 aspect angle은 적기의 방향/자세 정보를 어느 정도 압축해서 반영한 값이야. 그래서 tactical16이 적기 방향을 “전혀 모른다”는 건 아니고, 적기가 나를 기준으로 어떤 aspect를 보이는지는 알고 있어. 하지만 target yaw/roll/pitch/speed를 원시 feature로 직접 받는 건 아니야.
+수정 가능해. 방법은 두 가지야.
+tactical16 자체를 고쳐서 tactical20 같은 새 모드로 만들기
+student/my_observation.py에 custom observation을 만들어서 쓰기
+초보/실험용으로는 2번이 더 안전해. 예를 들면 기존 tactical16에 아래 4개를 추가해서 custom20을 만들 수 있어:
+target_roll_norm
+target_pitch_norm
+target_yaw_norm
+target_speed_norm
+그러면 입력 차원은 16에서 20으로 바뀜. 그래서 YAML도 이렇게 바꿔야 해:
+env:
+  observation_mode: custom
+  observation_module: student.my_observation
+그리고 기존 tactical16으로 학습한 모델은 못 씀. custom20으로 새로 학습해야 해.
+요약하면:
+네 이해가 맞다. tactical16은 적기 자세/속도를 직접 받지 않는다.
+받을 수 있게 수정 가능하다.
+다만 그 순간 tactical16이 아니라 custom observation이 되고, 모델은 새 observation 차원으로 다시 학습해야 한다.
+
+
+오전 12:24
+
+
+
+
+
+
+yaml은 뭘 말하는 거야?
+어느 코드 부분에서 적용돼?
+
+
+
+
+오전 12:27
+
+
+
+
+
+
+11s 동안 작업
+
+
+
+여기서 말한 YAML은 실험 실행 설정 파일이야. 코드가 아니라 “이번 학습을 어떤 조건으로 돌릴지 적어두는 설정표”라고 보면 돼.
+예시는 이런 파일들:
+C:\Users\biobe\desktop\aip\AIP_LIB\DogFightEnv\Release\experiments\student_sac_mlp.yaml
+C:\Users\biobe\desktop\aip\AIP_LIB\DogFightEnv\Release\experiments\student_ppo_mlp.yaml
+C:\Users\biobe\desktop\aip\AIP_LIB\DogFightEnv\Release\experiments\student_mixed_initial_sac_mlp.yaml
+안에는 이런 식으로 적혀 있어:
+env:
+  observation_mode: tactical16
+  target_mode: behavior_tree
+  target_behavior_dll: AIP_BASE_target.dll
+  reward_module: student.my_reward
+  observation_module: student.my_observation
+
+algo:
+  name: ppo
+  lr: 3.0e-4
+
+runtime:
+  iterations: 50
+
+적용 흐름은 이렇게 돼.
+YAML 파일
+  ↓
+scripts/run_experiment.py
+  ↓
+train_rllib.py
+  ↓
+env_creator()
+  ↓
+DogFightWrapper / DogFightEnv
+  ↓
+observation.py 또는 student/my_observation.py
+
+구체적으로는:
+[scripts/run_experiment.py (line 28)](C:/Users/biobe/desktop/aip/AIP_LIB/DogFightEnv/Release/scripts/run_experiment.py:28)가 YAML을 읽음
+data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+같은 파일에서 YAML 내용을 명령줄 옵션으로 바꿈
+
+예를 들어 YAML에:
+env:
+  observation_mode: custom
+  observation_module: student.my_observation
+라고 쓰면, 내부적으로 이런 실행 옵션으로 바뀜:
+--observation-mode custom --observation-module student.my_observation
+[train_rllib.py (line 1116)](C:/Users/biobe/desktop/aip/AIP_LIB/DogFightEnv/Release/train_rllib.py:1116)에서 env_config를 만듦
+env_config = {
+    "observation_mode": args.observation_mode,
+    ...
+}
+
+그리고 YAML에서 온 env_config를 합침:
+deep_update(env_config, load_experiment_env_config(args.experiment_yaml, ROOT))
+[train_rllib.py (line 70)](C:/Users/biobe/desktop/aip/AIP_LIB/DogFightEnv/Release/train_rllib.py:70)의 env_creator()에서 custom observation을 실제로 로드함
+observation_module = str(cfg.get("observation_module", "")).strip()
+if observation_module:
+    observation_hook = load_observation_hook(observation_module)
+    cfg["observation_mode"] = observation_hook["mode"]
+최종적으로 [single_agent_env.py (line 552)](C:/Users/biobe/desktop/aip/AIP_LIB/DogFightEnv/Release/src/dogfight/envs/single_agent_env.py:552)에서 observation을 만듦
+
+기본 tactical16이면:
+build_observation(self._observation_mode, ...)
+custom이면 student/my_observation.py의 build_observation()이 쓰이는 구조야.
+즉, 네가 observation을 바꾸려면 보통 두 군데를 맞춰야 해.
+student/my_observation.py
+여기에 새 observation 정의를 만들고,
+env:
+  observation_mode: custom
+  observation_module: student.my_observation
+YAML에 이렇게 써서 학습 실행에 연결하는 거야.
+직접 python train_rllib.py ...로 길게 옵션을 칠 수도 있는데,
+YAML은 그 옵션들을 파일로 저장해두는 방식이라고 보면 된다.
+
+실험이나 시뮬레이션 실행파일들 모두 찾아서 정리해
+
+정리하면, 현재 작업본 기준으로 실제 실험/시뮬레이션 실행 진입점은 AIP_LIB\DogFightEnv\Release와 AIP_LIB\Windows에 있다고 보면 돼. seungkyu 안에도 복사본이 있지만, 그건 별도/구버전 흔적이 섞여 있어.
+1. 학습 실험 실행
+가장 권장되는 실행 방식은 YAML 실험 실행기야.
+[scripts/run_experiment.py](C:/Users/biobe/desktop/aip/AIP_LIB/DogFightEnv/Release/scripts/run_experiment.py)
+YAML 파일을 읽어서 train_rllib.py, train_curriculum.py, student/my_train.py 중 하나를 실행함.
+예:cd C:\Users\biobe\desktop\aip\AIP_LIB\DogFightEnv\Release
+python scripts\run_experiment.py experiments\student_ppo_mlp.yaml --dry-run
+python scripts\run_experiment.py experiments\student_ppo_mlp.yaml
+
+
+[train_rllib.py](C:/Users/biobe/desktop/aip/AIP_LIB/DogFightEnv/Release/train_rllib.py)
+PPO/SAC 단일 학습 실행 본체.
+YAML 없이 직접 옵션으로도 실행 가능.
+
+[train_curriculum.py](C:/Users/biobe/desktop/aip/AIP_LIB/DogFightEnv/Release/train_curriculum.py)
+단계형 커리큘럼 학습 실행 본체.
+fixed target → pursuit → head-on → BT dogfight 같은 단계 학습.
+
+[student/my_train.py](C:/Users/biobe/desktop/aip/AIP_LIB/DogFightEnv/Release/student/my_train.py)
+학생용 간단 wrapper.
+내부적으로 train_rllib.py를 호출하는 쪽에 가까움.
+
+2. 실험 설정 YAML
+실험 조건 파일들:
+[student_sac_mlp.yaml](C:/Users/biobe/desktop/aip/AIP_LIB/DogFightEnv/Release/experiments/student_sac_mlp.yaml)
+[student_ppo_mlp.yaml](C:/Users/biobe/desktop/aip/AIP_LIB/DogFightEnv/Release/experiments/student_ppo_mlp.yaml)
+[student_sac_lstm.yaml](C:/Users/biobe/desktop/aip/AIP_LIB/DogFightEnv/Release/experiments/student_sac_lstm.yaml)
+[student_ppo_lstm.yaml](C:/Users/biobe/desktop/aip/AIP_LIB/DogFightEnv/Release/experiments/student_ppo_lstm.yaml)
+[student_mixed_initial_sac_mlp.yaml](C:/Users/biobe/desktop/aip/AIP_LIB/DogFightEnv/Release/experiments/student_mixed_initial_sac_mlp.yaml)
+[student_mixed_initial_sac_lstm.yaml](C:/Users/biobe/desktop/aip/AIP_LIB/DogFightEnv/Release/experiments/student_mixed_initial_sac_lstm.yaml)
+이 파일들이 observation, reward, target mode, PPO/SAC, iteration 등을 정함.
+
+3. 로컬 시뮬레이션/대전 실행
+학습이 아니라 “한 판 돌려보기” 용도.
+[run_local_dogfight.py](C:/Users/biobe/desktop/aip/AIP_LIB/DogFightEnv/Release/run_local_dogfight.py)
+로컬에서 ownship/target을 rl, bt, hybrid, fixed로 조합해서 1:1 실행.
+예:python run_local_dogfight.py --ownship-backend bt --target-backend bt --ownship-bt-dll AIP_BASE.dll --target-bt-dll AIP_BASE_target.dll --bt-rule-xml Rule_forTraining.xml --episode-step-limit 600 --save-log
+
+
+[run_unreal_inference.py](C:/Users/biobe/desktop/aip/AIP_LIB/DogFightEnv/Release/run_unreal_inference.py)
+Unreal/DogFightViewer 또는 외부 AI 서버와 UDP로 붙어서 inference 실행.
+GUI/클라이언트 연동용에 가까움.
+
+4. 제출/클라이언트용 실행
+[student/my_submission.py](C:/Users/biobe/desktop/aip/AIP_LIB/DogFightEnv/Release/student/my_submission.py)제출 또는 서버 연결용 설정 파일.
+팀명, 서버 IP, bundle 경로, observation 설정 등을 담는 쪽.
+
+5. 로그/리플레이/대시보드 실행
+시뮬레이션 결과 확인용.
+[tools/dashboard.py](C:/Users/biobe/desktop/aip/AIP_LIB/DogFightEnv/Release/tools/dashboard.py)
+통합 대시보드/리플레이 진입점.
+예:python tools\dashboard.py --default-tab replay --logdir artifacts --port 7870
+
+
+[tools/web_log_viewer.py](C:/Users/biobe/desktop/aip/AIP_LIB/DogFightEnv/Release/tools/web_log_viewer.py)
+--save-log로 저장한 CSV 리플레이 보기.
+예:python tools\web_log_viewer.py --logdir artifacts --port 7870
+
+
+[tools/training_dashboard/server.py](C:/Users/biobe/desktop/aip/AIP_LIB/DogFightEnv/Release/tools/training_dashboard/server.py)
+학습 로그 dashboard 서버.
+
+6. GUI 실행 파일
+[DogFightViewer.exe](C:/Users/biobe/desktop/aip/AIP_LIB/Windows/DogFightViewer.exe)
+보통 더블클릭하는 launcher.
+
+[DogFightViewer-Win64-Shipping.exe](C:/Users/biobe/desktop/aip/AIP_LIB/Windows/DogFightViewer/Binaries/Win64/DogFightViewer-Win64-Shipping.exe)
+실제 Unreal Viewer 본체.
+
+vc_redist.x64.exe, vc_redist.arm64.exe
+실행 파일이긴 하지만 시뮬레이터가 아니라 Visual C++ runtime 설치 파일.
+
+7. 보조/테스트 실행 파일
+RLLibLstm\tools\*.py 아래에도 실행 가능한 파일들이 많지만, 대부분은 LSTM/SAC 패치 검증, smoke test, 로그 분석용이야. 일반 실험/시뮬레이션 주 실행 파일은 아님.
+핵심만 외우면 이렇게야:
+학습 실험: scripts/run_experiment.py → train_rllib.py
+커리큘럼 학습: train_curriculum.py
+로컬 1:1 시뮬레이션: run_local_dogfight.py
+Unreal/Viewer 연동: run_unreal_inference.py
+결과 보기: tools/dashboard.py 또는 tools/web_log_viewer.py
+GUI: AIP_LIB/Windows/DogFightViewer.exe
+
+그럼 run_local_dogfight, run_unreal_inference랑 훈련용이랑
+ 다른거야?
+
+응, 다른 용도야.
+같은 환경/모델/BT를 쓰긴 하지만 역할이 달라.
+훈련용
+train_rllib.py
+train_curriculum.py
+scripts/run_experiment.py
+student/my_train.py
+얘네는 정책을 학습시키는 실행 파일이야.
+즉:
+observation 받음
+→ policy가 action 냄
+→ 시뮬레이터가 움직임
+→ reward 계산
+→ 그 reward로 policy 가중치를 업데이트
+→ 모델 저장
+훈련용은 reward가 중요해. 왜냐하면 reward로 모델을 고치니까.
+
+실행/검증/시뮬레이션용
+run_local_dogfight.py
+run_unreal_inference.py
+얘네는 이미 있는 policy나 BT를 실행해서 전투를 돌려보는 파일이야. 즉:
+observation 받음
+→ policy 또는 BT가 action 냄
+→ 시뮬레이터가 움직임
+→ 결과 확인
+
+여기서는 보통 모델을 새로 학습시키지 않아. 가중치 업데이트도 안 해.
+차이는 이거야.
+
+파일	용도	학습함?	Viewer/서버 연동
+train_rllib.py	PPO/SAC 학습	O	X
+train_curriculum.py	단계별 커리큘럼 학습	O	X
+scripts/run_experiment.py	YAML 읽어서 학습 실행	O	X
+run_local_dogfight.py	로컬에서 한 판 실행/검증	X	직접 Viewer 연동은 아님, 로그 저장 가능
+run_unreal_inference.py	Unreal/Viewer/클라이언트와 UDP 연동	X	O
+
+그러니까 네가 “모델을 훈련시키고 싶다”면:
+python scripts\run_experiment.py experiments\student_ppo_mlp.yaml
+또는:
+python train_rllib.py ...
+네가 “BT나 학습된 모델이 실제로 어떻게 나는지 한 판 보고 싶다”면:
+python run_local_dogfight.py ...
+네가 “DogFightViewer/Unreal 클라이언트랑 붙여서 실행하고 싶다”면:
+python run_unreal_inference.py ...
+한 줄로 말하면:
+train_*는 배우는 파일, run_*는 배운 것/BT를 돌려보는 파일이야.

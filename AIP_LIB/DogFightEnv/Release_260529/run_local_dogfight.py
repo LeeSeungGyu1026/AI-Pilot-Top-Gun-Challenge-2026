@@ -53,11 +53,21 @@ def build_provider(side: str, backend: str, bundle_dir: str | None, bt_dll: str,
     if backend == "rl":
         if not bundle_dir:
             raise ValueError(f"--{side}-bundle-dir is required when {side}-backend=rl")
-        return RLActionProvider(bundle_dir=bundle_dir, algorithm_factory=build_algorithm_from_bundle, policy_id=policy_id)
+        return RLActionProvider(
+            bundle_dir=bundle_dir,
+            algorithm_factory=build_algorithm_from_bundle,
+            policy_id=policy_id,
+            output_action_space="rl",
+        )
     if backend == "hybrid":
         if not bundle_dir:
             raise ValueError(f"--{side}-bundle-dir is required when {side}-backend=hybrid")
-        rl_provider = RLActionProvider(bundle_dir=bundle_dir, algorithm_factory=build_algorithm_from_bundle, policy_id=policy_id)
+        rl_provider = RLActionProvider(
+            bundle_dir=bundle_dir,
+            algorithm_factory=build_algorithm_from_bundle,
+            policy_id=policy_id,
+            output_action_space="rl",
+        )
         bt_provider = BTActionProvider(dll_name=bt_dll)
         return HybridActionProvider(
             primary_provider=rl_provider,

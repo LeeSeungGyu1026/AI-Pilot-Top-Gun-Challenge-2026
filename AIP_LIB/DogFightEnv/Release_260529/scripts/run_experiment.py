@@ -114,6 +114,8 @@ def build_argv(exp: dict[str, Any], exp_path: Path) -> tuple[Path, list[str]]:
 
     if runtime.get("use_tune", False):
         argv.append("--use-tune")
+    if runtime.get("legacy_api_stack", False):
+        argv.append("--legacy-api-stack")
     if runtime.get("save_lightweight_bundle", True) is False:
         argv.append("--no-save-lightweight-bundle")
     save_native = runtime.get("save_native_checkpoint", False)

@@ -1,0 +1,114 @@
+SAC 기준으로 설명할게. 지금 네 로그의 Actor, Critic, Alpha는 “학습 내부에서 policy가 어떻게 변하고 있는지”를 보는 지표야. batch/epoch처럼 직관적인 훈련 진행 단위는 아니고, 신경망이 어떤 방향으로 업데이트되고 있는지 보는 값에 가까워.
+Actor
+Actor는 실제 행동을 내는 신경망이야.
+흐름은 이거야:
+observation -> Actor(policy network) -> action
+전투기에서는 action이 보통 이런 4개 제어값이지:
+[roll, pitch, yaw/rudder, throttle]
+Actor 값은 “actor loss” 또는 actor 관련 학습 지표야.
+정확히는 SAC가 현재 policy를 더 좋은 행동으로 바꾸려고 계산한 목적함수 값이야.
+중요한 건:
+Actor 값이 낮다 = 무조건 좋다
+Actor 값이 높다 = 무조건 나쁘다
+이렇게 보면 안 돼.
+다만 네 상황에서는 Actor가:
+50 -> 80 -> 110
+처럼 계속 커지면서 동시에 추락이 많았지.
+그럴 땐 “policy가 안정적으로 자리 잡았다”기보다, “행동 정책이 계속 크게 밀리고 있다”는 신호로 볼 수 있어.
+쉽게 말하면 Actor는:
+조종사가 어떤 조작을 할지 결정하는 뇌
+이고, Actor 값은:
+그 뇌를 얼마나/어떤 방향으로 고치고 있는지의 학습 손실 지표
+야.
+
+Critic
+Critic은 행동의 가치를 평가하는 신경망이야.
+흐름은 이거야:
+observation + action -> Critic(Q network) -> 이 행동이 얼마나 좋은가
+Actor가 행동을 내면 Critic은 그 행동을 평가해.
+예를 들어:
+현재 자세에서 pitch down을 더 주면 곧 추락할 것 같다 -> 낮은 Q
+현재 자세에서 수평 유지하며 속도 유지한다 -> 높은 Q
+적을 전방에 두고 안정적으로 접근한다 -> 높은 Q
+
+SAC에서는 보통 Critic이 2개 있어.
+왜냐하면 하나만 쓰면 행동 가치를 너무 낙관적으로 평가하는 문제가 생기기 쉬워서, 두 개를 두고 더 보수적으로 학습해.
+Critic 값은 대체로 “critic loss”야.
+즉 Critic이 예측한 가치와 실제 reward 기반 target 사이의 오차.
+네 로그에서 Critic이:
+0.3 -> 0.8 -> 1.4
+처럼 올라가면, Critic이 현재 상황/행동의 가치를 점점 더 맞추기 어려워지고 있다는 뜻일 수 있어.
+특히 reward 구조가 바뀌거나 observation 분포가 바뀌면 Critic이 흔들려.
+예를 들어 상대정보가 갑자기 들어오면:
+이 입력에서 이 action이 좋은지 나쁜지
+를 Critic이 새로 배워야 하니까 loss가 올라갈 수 있어.
+쉽게 말하면 Critic은:
+코치 또는 평가관
+이고, Critic 값은:
+그 평가관이 현재 상황을 얼마나 헷갈려하는지
+에 가까워.
+
+Alpha
+Alpha는 SAC에서 “탐험을 얼마나 장려할지”를 조절하는 값이야.
+SAC의 핵심은 reward만 최대화하는 게 아니라, entropy도 같이 본다는 거야.
+좋은 행동을 하자 + 너무 한 행동만 고집하지 말자
+여기서 entropy는 “행동의 랜덤성/다양성”이야.
+Alpha는 그 entropy 보상의 가중치야.
+Alpha 높음 -> 더 랜덤하게 탐험하려 함
+Alpha 낮음 -> 더 확정적으로 행동하려 함
+네 로그에서 Alpha가:
+0.38 -> 0.21
+처럼 내려갔지.
+이건 policy가 점점 탐험을 줄이고, 더 자신 있게 특정 행동을 고르려는 방향으로 가고 있다는 뜻이야.
+문제는 그 “자신 있는 행동”이 좋은 행동이면 괜찮은데, 추락하는 행동이면 망가져.
+그래서 Alpha가 내려가는 동안 ownship altitude below min이 계속 많으면:
+나쁜 습관을 확신 있게 굳히는 중
+일 수 있어.
+쉽게 말하면 Alpha는:
+조종사가 이것저것 시도해보는 정도
+야.
+
+셋의 관계
+SAC 학습은 대충 이렇게 돌아가.
+1. Actor가 action을 냄
+2. 환경이 reward를 줌
+3. Critic이 "그 action이 얼마나 좋았나"를 학습함
+4. Actor는 Critic이 높게 평가하는 action을 더 자주 하도록 바뀜
+5. Alpha는 random exploration 정도를 조절함
+
+그림으로 보면:
+observation
+   ↓
+Actor(policy) ──→ action ──→ simulator ──→ reward
+   ↑                                      ↓
+   └──────── Critic(Q-value) ←────────────┘
+
+Alpha = Actor가 action을 얼마나 다양하게 내도록 할지 조절
+
+네 최근 로그는 이런 느낌이야:
+Actor 증가
+Critic 증가
+Alpha 감소
+추락 episode 많음
+가끔 600 step 생존
+
+이걸 해석하면:
+정책은 계속 강하게 바뀌고 있고,
+평가기는 아직 안정적으로 못 맞추고 있으며,
+탐험은 줄고 있고,
+그 와중에 생존 행동을 간헐적으로 찾고 있다.
+즉, 완전 실패는 아니지만 안정 수렴은 아님.
+
+좋은 흐름이면 보통 이렇게 보고 싶어:
+num_steps: 600이 자주 나옴
+termination: max time out 증가
+Reward: 음수에서 0 근처 또는 양수로 개선
+Actor: 무한히 계속 커지지 않고 완만해짐
+Critic: 폭증하지 않고 일정 범위
+Alpha: 너무 빨리 바닥나지 않음
+PolicyProbe action: target_left 같은 케이스에서 과격하게 튀지 않음
+
+지금 제일 중요한 건 Actor/Critic/Alpha 자체보다 이거야:
+num_steps와 termination
+강화학습 로그는 내부 지표가 좀 이상해 보여도, 실제 episode가 살아남으면 일단 맞는 방향일 수 있어.
+반대로 Actor가 예뻐 보여도 계속 추락하면 실패야.

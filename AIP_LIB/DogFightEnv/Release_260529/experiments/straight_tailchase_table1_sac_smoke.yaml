@@ -1,0 +1,119 @@
+# Fast smoke version of straight_tailchase_table1_sac_v1.
+# Use this before long training to verify env reset, BT target, reward hook,
+# engagement logs, bundle saving, and SAC plumbing.
+
+name: straight_tailchase_table1_sac_smoke
+script: train_rllib
+
+output:
+  name: team01
+  tag: straight_tailchase_table1_sac_smoke
+
+env:
+  observation_mode: tactical16
+  reward_module: student.my_reward_table1
+  target_mode: behavior_tree
+  target_behavior_dll: AIP_BASE_target_circle_debug.dll
+  bt_rule_xml: ..\..\Rule_Straight.xml
+  max_engage_time: 12.0
+  episode_step_limit: 240
+
+env_config:
+  step_ratio: 6
+  action_slew_limit: 0.15
+  action_abs_limit: [0.60, 0.45, 0.45, 1.0]
+  offensive_saddle:
+    enabled: true
+    range_m: [450.0, 650.0]
+    aspect_deg: [0.0, 6.0]
+    altitude_m: 7000.0
+    target_speed_mps: 245.0
+    own_speed_mps: 300.0
+  range_discipline:
+    enabled: true
+    max_range_m: 1800.0
+    grow_steps: 10
+  wez:
+    angle_deg: 2.0
+    min_range_m: 152.4
+    max_range_m: 914.4
+  reward:
+    win_reward: 220.0
+    loss_reward: -150.0
+    draw_reward: -100.0
+    own_crash_penalty: -180.0
+    target_crash_reward: -20.0
+    guard_fail_penalty: -80.0
+    step_penalty: -0.004
+    adverse_angle_scale: 0.35
+    track_angle_scale: 0.45
+    relative_position_scale: 1.10
+    closure_scale: 0.35
+    gunsnap_blue_scale: 1.40
+    gunsnap_red_scale: 0.20
+    deck_scale: 0.60
+    too_close_scale: 0.80
+    damage_scale: 80.0
+    altitude_target_m: 7000.0
+    altitude_band_m: 2500.0
+    safe_altitude_m: 2600.0
+    altitude_hold_scale: 0.04
+    low_altitude_guard_scale: 2.0
+    attitude_envelope_guard_scale: 0.25
+    nose_down_guard_scale: 0.45
+    descent_rate_guard_scale: 0.25
+    speed_penalty_scale: 0.04
+    wez_band_scale: 0.70
+    wez_band_center_m: 520.0
+    wez_band_half_width_m: 390.0
+    wez_nose_half_angle_deg: 8.0
+    wez_hold_bonus: 0.35
+    official_wez_aim_scale: 3.0
+    official_wez_aim_half_angle_deg: 3.0
+    precision_aim_scale: 1.5
+    precision_aim_sigma_deg: 3.0
+    precision_aim_power: 1.0
+
+algo:
+  name: sac
+  framework: torch
+  lr: 3.0e-4
+  gamma: 0.99
+  train_batch_size: 32
+  minibatch_size: 32
+  tau: 0.005
+  target_entropy: auto
+  replay_buffer_capacity: 1000
+  mlp:
+    enabled: true
+    fcnet_hiddens: [128, 128]
+    fcnet_activation: relu
+    head_fcnet_hiddens: []
+    head_fcnet_activation: relu
+
+runtime:
+  iterations: 1
+  legacy_api_stack: true
+  num_env_runners: 0
+  num_envs_per_env_runner: 1
+  rollout_fragment_length: 32
+  batch_mode: truncate_episodes
+  save_lightweight_bundle: true
+  lightweight_bundle_frequency: 1
+  save_native_checkpoint: false
+
+dashboard:
+  enabled: true
+  logdir: artifacts/dashboard
+
+policy_probe:
+  enabled: false
+
+engagement_log:
+  enabled: true
+  interval: 1
+  steps: 240
+  episodes: 1
+  print: true
+
+notes: "Smoke test for straight-tailchase SAC/tactical16 with straight BT target."

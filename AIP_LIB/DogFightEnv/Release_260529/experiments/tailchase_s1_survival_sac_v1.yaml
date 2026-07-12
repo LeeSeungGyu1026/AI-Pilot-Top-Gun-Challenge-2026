@@ -1,0 +1,133 @@
+# Stage 1: keep Blue alive and controllable.
+#
+# Goal:
+#   Blue must not crash or dive away while starting behind a straight BT target.
+#   This stage intentionally weakens kill pressure and prioritizes altitude,
+#   attitude, speed, and gentle control.
+#
+# Run:
+#   C:\Users\biobe\miniconda3\envs\aip\python.exe scripts\run_experiment.py experiments\tailchase_s1_survival_sac_v1.yaml
+# Analyze:
+#   C:\Users\biobe\miniconda3\envs\aip\python.exe scripts\analyze_tailchase_run.py tailchase_s1_survival_sac_v1 --report artifacts\reports\team01\tailchase_s1_survival_sac_v1\analysis.md
+
+name: tailchase_s1_survival_sac_v1
+script: train_rllib
+
+output:
+  name: team01
+  tag: tailchase_s1_survival_sac_v1
+
+env:
+  observation_mode: tactical16
+  reward_module: student.my_reward_table1
+  target_mode: behavior_tree
+  target_behavior_dll: AIP_BASE_target_circle_debug.dll
+  bt_rule_xml: ..\..\Rule_Straight.xml
+  max_engage_time: 75.0
+  episode_step_limit: 4500
+
+env_config:
+  step_ratio: 6
+  action_slew_limit: 0.10
+  action_abs_limit: [0.45, 0.32, 0.32, 1.0]
+  offensive_saddle:
+    enabled: true
+    range_m: [700.0, 1200.0]
+    aspect_deg: [0.0, 8.0]
+    altitude_m: 7000.0
+    target_speed_mps: 245.0
+    own_speed_mps: 285.0
+  range_discipline:
+    enabled: true
+    max_range_m: 2800.0
+    grow_steps: 30
+  wez:
+    angle_deg: 2.0
+    min_range_m: 152.4
+    max_range_m: 914.4
+  reward:
+    win_reward: 80.0
+    loss_reward: -180.0
+    draw_reward: -80.0
+    own_crash_penalty: -240.0
+    target_crash_reward: -20.0
+    guard_fail_penalty: -120.0
+    survival_bonus: 0.02
+    step_penalty: -0.003
+    adverse_angle_scale: 0.20
+    track_angle_scale: 0.20
+    relative_position_scale: 0.50
+    closure_scale: 0.20
+    gunsnap_blue_scale: 0.20
+    gunsnap_red_scale: 0.20
+    deck_scale: 0.80
+    too_close_scale: 0.50
+    damage_scale: 10.0
+    altitude_target_m: 7000.0
+    altitude_band_m: 1800.0
+    safe_altitude_m: 3200.0
+    altitude_hold_scale: 0.12
+    low_altitude_guard_scale: 4.0
+    attitude_envelope_guard_scale: 0.60
+    pitch_envelope_ref_deg: 30.0
+    roll_envelope_ref_deg: 95.0
+    nose_down_guard_scale: 1.0
+    nose_down_pitch_ref_deg: 18.0
+    descent_rate_guard_scale: 0.70
+    descent_rate_ref_mps: 55.0
+    speed_penalty_scale: 0.08
+    speed_target_kcas: 330.0
+    speed_band_kcas: 180.0
+    wez_band_scale: 0.10
+    wez_hold_bonus: 0.05
+    official_wez_aim_scale: 0.20
+    official_wez_aim_half_angle_deg: 4.0
+    precision_aim_scale: 0.10
+    precision_aim_sigma_deg: 4.0
+
+algo:
+  name: sac
+  framework: torch
+  lr: 3.0e-4
+  gamma: 0.99
+  train_batch_size: 256
+  minibatch_size: 256
+  tau: 0.005
+  target_entropy: auto
+  replay_buffer_capacity: 50000
+  mlp:
+    enabled: true
+    fcnet_hiddens: [256, 256]
+    fcnet_activation: relu
+    head_fcnet_hiddens: []
+    head_fcnet_activation: relu
+
+runtime:
+  iterations: 80
+  legacy_api_stack: true
+  num_env_runners: 0
+  num_envs_per_env_runner: 1
+  rollout_fragment_length: auto
+  batch_mode: truncate_episodes
+  save_lightweight_bundle: true
+  lightweight_bundle_frequency: 10
+  save_native_checkpoint: true
+  native_checkpoint_frequency: 40
+
+dashboard:
+  enabled: true
+  logdir: artifacts/dashboard
+
+policy_probe:
+  enabled: false
+  interval: 20
+  steps: 4
+
+engagement_log:
+  enabled: false
+  interval: 20
+  steps: 900
+  episodes: 1
+  print: true
+
+notes: "Stage 1 survival/control: keep Blue level, stable, and alive behind straight BT before adding strong pursuit/kill pressure."

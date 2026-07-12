@@ -54,6 +54,7 @@ class DogFightWrapper(DogFightEnv):
             self.config.get("action_abs_limit", 0.0)
         )
         self._prev_action = None
+        self._action_postprocess_cfg = self.config.get("action_postprocess") or {}
         self._saddle_rng = np.random.default_rng()
         # Range-discipline: end the "extend to infinity" exploit early so the
         # departure penalty lands while it's still credit-assignable.
@@ -88,6 +89,175 @@ class DogFightWrapper(DogFightEnv):
         if np.any(arr <= 0.0):
             raise ValueError("action_abs_limit values must be positive")
         return arr
+
+    @staticmethod
+    def _cfg_enabled(cfg: dict | None) -> bool:
+        return bool(cfg and cfg.get("enabled", False))
+
+    @staticmethod
+    def _signed_unit(value: float, ref: float) -> float:
+        ref = max(float(ref), 1.0e-6)
+        return float(np.clip(float(value) / ref, -1.0, 1.0))
+
+    def _apply_action_postprocess(self, action: np.ndarray) -> np.ndarray:
+        cfg = self._action_postprocess_cfg
+        if not self._cfg_enabled(cfg):
+            return np.asarray(action, dtype=np.float32)
+
+        a = np.asarray(action, dtype=np.float32).copy()
+        az_deg, el_deg = self._geo_info._get_los_angle(
+            self._ownship_state,
+            self._target_state,
+        )
+        distance_m = float(
+            self._geo_info._get_distance(self._ownship_state, self._target_state)
+        )
+
+        los = cfg.get("los_assist") or {}
+        if self._cfg_enabled(los):
+            az = self._signed_unit(az_deg, float(los.get("az_ref_deg", 8.0)))
+            el = self._signed_unit(el_deg, float(los.get("el_ref_deg", 6.0)))
+            max_delta = float(los.get("max_delta", 0.35))
+            roll_sign = float(los.get("roll_sign", 1.0))
+            rudder_sign = float(los.get("rudder_sign", 1.0))
+            pitch_sign = float(los.get("pitch_sign", -1.0))
+            a[0] += np.clip(roll_sign * float(los.get("roll_gain", 0.0)) * az, -max_delta, max_delta)
+            a[1] += np.clip(pitch_sign * float(los.get("pitch_gain", 0.0)) * el, -max_delta, max_delta)
+            a[2] += np.clip(rudder_sign * float(los.get("rudder_gain", 0.0)) * az, -max_delta, max_delta)
+
+        bank = cfg.get("bank_turn_assist") or {}
+        if self._cfg_enabled(bank):
+            ata = abs(float(self._geo_info._get_antenna_train_angle(
+                self._ownship_state,
+                self._target_state,
+                False,
+            )))
+            if ata > float(bank.get("disable_ata_deg", 0.0)):
+                az = self._signed_unit(az_deg, float(bank.get("az_ref_deg", 12.0)))
+                a[0] += float(bank.get("roll_gain", 0.0)) * az
+                a[1] -= float(bank.get("pull_gain", 0.0)) * abs(az)
+
+        rng = cfg.get("range_assist") or {}
+        if self._cfg_enabled(rng):
+            target_m = float(rng.get("target_m", 720.0))
+            band_m = max(float(rng.get("band_m", 350.0)), 1.0)
+            err = self._signed_unit(distance_m - target_m, band_m)
+            a[3] += float(rng.get("throttle_gain", 0.0)) * err
+            a[3] = np.clip(
+                a[3],
+                float(rng.get("min_throttle_action", -1.0)),
+                float(rng.get("max_throttle_action", 1.0)),
+            )
+
+        safety = cfg.get("safety_filter") or {}
+        if self._cfg_enabled(safety):
+            altitude = float(self._ownship_state[44])
+            roll_deg = float(self._ownship_state[3])
+            pitch_deg = float(self._ownship_state[4])
+            floor_m = float(safety.get("floor_m", 2500.0))
+            safe_m = max(float(safety.get("safe_m", 3500.0)), floor_m + 1.0)
+            if altitude < safe_m:
+                severity = float(np.clip((safe_m - altitude) / (safe_m - floor_m), 0.0, 1.0))
+                a[1] -= float(safety.get("pitch_up_gain", 0.0)) * severity
+                a[3] = max(a[3], float(safety.get("min_throttle_action", 0.4)))
+                roll_ref = max(float(safety.get("roll_ref_deg", 90.0)), 1.0)
+                a[0] -= float(safety.get("roll_level_gain", 0.0)) * np.clip(
+                    roll_deg / roll_ref,
+                    -1.0,
+                    1.0,
+                ) * severity
+                if pitch_deg < -float(safety.get("nose_down_deg", 10.0)):
+                    a[1] -= float(safety.get("nose_down_pitch_gain", 0.0)) * severity
+
+        return np.clip(a, -1.0, 1.0)
+
+    def _process_ownship_rl_action(self, action: np.ndarray) -> np.ndarray:
+        action = self._apply_action_postprocess(action)
+
+        if self._action_slew_limit > 0.0:
+            a = np.asarray(action, dtype=np.float32)
+            if self._prev_action is not None:
+                lo = self._prev_action - self._action_slew_limit
+                hi = self._prev_action + self._action_slew_limit
+                a = np.clip(a, lo, hi)
+            action = a
+
+        if self._action_abs_limit is not None:
+            action = np.clip(
+                np.asarray(action, dtype=np.float32),
+                -self._action_abs_limit,
+                self._action_abs_limit,
+            )
+        action = self._apply_emergency_recovery(action)
+        if self._action_slew_limit > 0.0:
+            self._prev_action = np.asarray(action, dtype=np.float32).copy()
+        return np.asarray(action, dtype=np.float32)
+
+    def _apply_emergency_recovery(self, action: np.ndarray) -> np.ndarray:
+        cfg = self._action_postprocess_cfg
+        emergency = (cfg.get("emergency_recovery") or {}) if cfg else {}
+        if not self._cfg_enabled(emergency):
+            return np.asarray(action, dtype=np.float32)
+
+        altitude = float(self._ownship_state[44])
+        trigger_m = float(emergency.get("trigger_m", 4800.0))
+        floor_m = float(emergency.get("floor_m", 3600.0))
+        if altitude >= trigger_m:
+            return np.asarray(action, dtype=np.float32)
+
+        hazard_gates = []
+        require_nose_down = emergency.get("require_nose_down_deg")
+        if require_nose_down is not None:
+            pitch_deg = float(self._ownship_state[4])
+            hazard_gates.append(pitch_deg < -abs(float(require_nose_down)))
+
+        require_descent = emergency.get("require_descent_mps")
+        if require_descent is not None:
+            velocity_index = int(emergency.get("vertical_velocity_index", 8))
+            if 0 <= velocity_index < len(self._ownship_state):
+                descent_sign = float(emergency.get("vertical_velocity_descent_sign", 1.0))
+                descent_mps = descent_sign * float(self._ownship_state[velocity_index])
+                hazard_gates.append(descent_mps > abs(float(require_descent)))
+
+        if hazard_gates and not any(hazard_gates):
+            return np.asarray(action, dtype=np.float32)
+
+        span = max(trigger_m - floor_m, 1.0)
+        severity = float(np.clip((trigger_m - altitude) / span, 0.0, 1.0))
+        a = np.asarray(action, dtype=np.float32).copy()
+
+        min_pitch_up = -abs(float(emergency.get("pitch_up_action", 0.50)))
+        a[1] = min(float(a[1]), min_pitch_up * severity)
+        a[3] = max(float(a[3]), float(emergency.get("min_throttle_action", 0.75)))
+
+        roll_ref = max(float(emergency.get("roll_ref_deg", 80.0)), 1.0)
+        roll_deg = float(self._ownship_state[3])
+        a[0] -= float(emergency.get("roll_level_gain", 0.35)) * np.clip(
+            roll_deg / roll_ref,
+            -1.0,
+            1.0,
+        ) * severity
+        return np.clip(a, -1.0, 1.0)
+
+    def _step_controlled_aircraft(self, action: np.ndarray) -> None:
+        if self._ownship_action_provider is not None:
+            context = self._build_action_context(
+                self._sim,
+                self._target_sim,
+                self._ownship_state,
+                self._target_state,
+                self.pre_obs,
+            )
+            result = self._ownship_action_provider.compute_action(context)
+            provider_action = np.asarray(result.action, dtype=np.float32)
+            if result.info.get("action_space") == "rl":
+                provider_action = self._process_ownship_rl_action(provider_action)
+                self._sim.step(self._to_sim_action(provider_action))
+            else:
+                self._sim.step(provider_action)
+            return
+
+        super()._step_controlled_aircraft(action)
 
     def _place_offensive_saddle(self, cfg: dict) -> None:
         """Spawn the agent in an OFFENSIVE SADDLE: a few hundred metres behind a
@@ -164,6 +334,9 @@ class DogFightWrapper(DogFightEnv):
         self._wv_switch_left -= 1
 
     def reset(self, *args, **kwargs):
+        seed = kwargs.get("seed")
+        if seed is not None:
+            self._saddle_rng = np.random.default_rng(int(seed))
         # Start each episode from a neutral action so the first step is also
         # slew-limited (no violent input out of the gate).
         self._prev_action = np.zeros(4, dtype=np.float32)
@@ -222,22 +395,8 @@ class DogFightWrapper(DogFightEnv):
                     )
                 self._weave_step += 1
 
-        if self._action_slew_limit > 0.0:
-            a = np.asarray(action, dtype=np.float32)
-            if self._prev_action is not None:
-                lo = self._prev_action - self._action_slew_limit
-                hi = self._prev_action + self._action_slew_limit
-                a = np.clip(a, lo, hi)
-            action = a
-
-        if self._action_abs_limit is not None:
-            action = np.clip(
-                np.asarray(action, dtype=np.float32),
-                -self._action_abs_limit,
-                self._action_abs_limit,
-            )
-        if self._action_slew_limit > 0.0:
-            self._prev_action = np.asarray(action, dtype=np.float32).copy()
+        if self._ownship_action_provider is None:
+            action = self._process_ownship_rl_action(action)
 
         result = super().step(action)
         if self._rd_cfg.get("enabled") and isinstance(result, tuple) and len(result) == 5:

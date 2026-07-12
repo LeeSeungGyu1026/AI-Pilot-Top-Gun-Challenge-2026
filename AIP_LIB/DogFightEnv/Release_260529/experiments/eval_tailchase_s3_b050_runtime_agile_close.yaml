@@ -1,0 +1,69 @@
+# Eval probe: closer range assist plus slightly faster action slew.
+
+env:
+  observation_mode: tactical16
+  target_mode: behavior_tree
+  target_behavior_dll: AIP_BASE_target_circle_debug.dll
+  bt_rule_xml: ..\..\Rule_Straight.xml
+  max_engage_time: 100.0
+  episode_step_limit: 6000
+
+env_config:
+  step_ratio: 6
+  action_slew_limit: 0.14
+  action_abs_limit: [0.55, 0.34, 0.42, 1.0]
+  action_postprocess:
+    enabled: true
+    los_assist:
+      enabled: true
+      az_ref_deg: 5.5
+      el_ref_deg: 4.5
+      roll_gain: 0.30
+      rudder_gain: 0.50
+      pitch_gain: 0.16
+      max_delta: 0.34
+      roll_sign: 1.0
+      rudder_sign: 1.0
+      pitch_sign: -1.0
+    bank_turn_assist:
+      enabled: true
+      disable_ata_deg: 0.0
+      az_ref_deg: 11.5
+      roll_gain: 0.10
+      pull_gain: 0.06
+    range_assist:
+      enabled: true
+      target_m: 560.0
+      band_m: 340.0
+      throttle_gain: 0.36
+      min_throttle_action: -0.20
+      max_throttle_action: 1.0
+    safety_filter:
+      enabled: true
+      floor_m: 4000.0
+      safe_m: 5750.0
+      pitch_up_gain: 0.56
+      nose_down_deg: 5.0
+      nose_down_pitch_gain: 0.46
+      roll_level_gain: 0.40
+      roll_ref_deg: 80.0
+      min_throttle_action: 0.64
+    emergency_recovery:
+      enabled: true
+      trigger_m: 4700.0
+      floor_m: 3200.0
+      pitch_up_action: 0.57
+      roll_level_gain: 0.35
+      roll_ref_deg: 80.0
+      min_throttle_action: 0.80
+  offensive_saddle:
+    enabled: true
+    range_m: [500.0, 820.0]
+    aspect_deg: [0.0, 7.0]
+    altitude_m: 7400.0
+    target_speed_mps: 250.0
+    own_speed_mps: 264.0
+  wez:
+    angle_deg: 8.0
+    min_range_m: 152.4
+    max_range_m: 914.4

@@ -1,0 +1,151 @@
+# Stage 2 anchor v2: keep the successful Stage 2 contact geometry, add logs.
+#
+# v1 made the initial saddle too gentle/far and WEZ fell. v2 moves back toward
+# the earlier successful Stage 2 setup while retaining explicit anchor reward
+# and detailed reward-component logging.
+
+name: tailchase_s2_anchor_reward_sac_v2
+script: train_rllib
+
+output:
+  name: team01
+  tag: tailchase_s2_anchor_reward_sac_v2
+
+env:
+  observation_mode: tactical16
+  reward_module: student.my_reward_stage2_anchor
+  target_mode: behavior_tree
+  target_behavior_dll: AIP_BASE_target_circle_debug.dll
+  bt_rule_xml: ..\..\Rule_Straight.xml
+  max_engage_time: 120.0
+  episode_step_limit: 7200
+
+env_config:
+  step_ratio: 6
+  action_slew_limit: 0.12
+  action_abs_limit: [0.54, 0.38, 0.42, 1.0]
+  action_postprocess:
+    enabled: true
+    los_assist:
+      enabled: true
+      az_ref_deg: 6.0
+      el_ref_deg: 5.0
+      roll_gain: 0.30
+      rudder_gain: 0.46
+      pitch_gain: 0.28
+      max_delta: 0.34
+      roll_sign: 1.0
+      rudder_sign: 1.0
+      pitch_sign: -1.0
+    bank_turn_assist:
+      enabled: true
+      disable_ata_deg: 0.0
+      az_ref_deg: 12.0
+      roll_gain: 0.10
+      pull_gain: 0.045
+    range_assist:
+      enabled: true
+      target_m: 680.0
+      band_m: 360.0
+      throttle_gain: 0.30
+      min_throttle_action: -0.20
+      max_throttle_action: 1.0
+    safety_filter:
+      enabled: true
+      floor_m: 3200.0
+      safe_m: 4600.0
+      pitch_up_gain: 0.36
+      nose_down_deg: 7.0
+      nose_down_pitch_gain: 0.28
+      roll_level_gain: 0.30
+      roll_ref_deg: 84.0
+      min_throttle_action: 0.52
+  offensive_saddle:
+    enabled: true
+    range_m: [520.0, 860.0]
+    aspect_deg: [0.0, 7.0]
+    altitude_m: 7200.0
+    target_speed_mps: 250.0
+    own_speed_mps: 264.0
+  range_discipline:
+    enabled: true
+    max_range_m: 3600.0
+    grow_steps: 55
+  wez:
+    angle_deg: 10.0
+    min_range_m: 152.4
+    max_range_m: 914.4
+  reward:
+    altitude_target_m: 7200.0
+    altitude_band_m: 2400.0
+    safe_altitude_m: 3900.0
+    altitude_hold_scale: 0.16
+    low_altitude_guard_scale: 4.5
+    nose_down_guard_scale: 1.4
+    descent_rate_guard_scale: 1.0
+    track_angle_scale: 1.00
+    relative_position_scale: 2.00
+    closure_scale: 0.45
+    gunsnap_blue_scale: 0.90
+    too_close_scale: 1.60
+    damage_scale: 30.0
+    wez_band_scale: 1.80
+    wez_band_center_m: 680.0
+    wez_band_half_width_m: 420.0
+    wez_nose_half_angle_deg: 16.0
+    wez_hold_bonus: 0.75
+    official_wez_aim_scale: 2.40
+    official_wez_aim_half_angle_deg: 12.0
+    precision_aim_scale: 1.00
+    precision_aim_sigma_deg: 9.0
+    anchor_range_center_m: 680.0
+    anchor_range_half_width_m: 420.0
+    anchor_nose_sigma_deg: 18.0
+    anchor_rear_min_deg: 115.0
+    anchor_nose_scale: 1.40
+    anchor_rear_scale: 1.10
+    anchor_saddle_scale: 3.20
+    anchor_terminal_scale: 12.0
+    anchor_bad_geometry_scale: 0.50
+
+algo:
+  name: sac
+  framework: torch
+  lr: 8.0e-5
+  gamma: 0.99
+  train_batch_size: 256
+  minibatch_size: 256
+  tau: 0.005
+  target_entropy: auto
+  replay_buffer_capacity: 70000
+  mlp:
+    enabled: true
+    fcnet_hiddens: [256, 256]
+    fcnet_activation: relu
+    head_fcnet_hiddens: []
+    head_fcnet_activation: relu
+
+runtime:
+  iterations: 60
+  legacy_api_stack: true
+  num_env_runners: 0
+  num_envs_per_env_runner: 1
+  rollout_fragment_length: auto
+  batch_mode: truncate_episodes
+  save_lightweight_bundle: true
+  lightweight_bundle_frequency: 10
+  save_native_checkpoint: true
+  native_checkpoint_frequency: 40
+  init_bundle: artifacts/models/team01/tailchase_s1_survival_reward_sac_v1
+
+dashboard:
+  enabled: true
+  logdir: artifacts/dashboard
+
+policy_probe:
+  enabled: false
+
+engagement_log:
+  enabled: false
+
+notes: "Stage 2 anchor v2: restore closer saddle geometry, lower LR, log anchor/Table-I components. Keep engagement log off because extra BT envs can crash the native DLL."

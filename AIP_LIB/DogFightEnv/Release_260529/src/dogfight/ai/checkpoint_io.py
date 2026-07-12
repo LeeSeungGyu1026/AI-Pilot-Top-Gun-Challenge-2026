@@ -108,20 +108,38 @@ def _apply_policy_weights(
             except Exception:
                 pass
 
-    env_runner = getattr(algorithm, "env_runner", None)
-    if env_runner is not None and hasattr(env_runner, "set_state"):
-        env_runner.set_state({"rl_module": weights})
-        return True
-    if env_runner is not None and hasattr(env_runner, "module"):
-        env_runner.module.set_state(weights)
-        return True
     if applied:
         return True
 
+    try:
+        policy = algorithm.get_policy(policy_id)
+        if policy is not None:
+            policy.set_weights(weights)
+            return True
+    except Exception:
+        pass
+
+    env_runner = getattr(algorithm, "env_runner", None)
+    if env_runner is not None and hasattr(env_runner, "set_state"):
+        try:
+            env_runner.set_state({"rl_module": weights})
+            return True
+        except Exception:
+            pass
+    if env_runner is not None and hasattr(env_runner, "module"):
+        try:
+            env_runner.module.set_state(weights)
+            return True
+        except Exception:
+            pass
+
     module = _get_rl_module(algorithm, policy_id)
     if module is not None and hasattr(module, "set_state"):
-        module.set_state(weights)
-        return True
+        try:
+            module.set_state(weights)
+            return True
+        except Exception:
+            pass
 
     try:
         policy = algorithm.get_policy(policy_id)

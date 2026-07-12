@@ -1,0 +1,174 @@
+# Stage 3 hard-saddle micro continuation.
+#
+# Baseline to beat on fixed seed 260529 / 30 episodes:
+#   b050_stabilize bundle_000005 + late emergency
+#   win 40% / loss 0% / draw 60%
+#
+# Motivation:
+# - Terminal finish reward collapsed attack behavior.
+# - Reacquire dense reward lowered draw target health but also converted wins to draws.
+# - This run keeps the proven Stage 3 kill reward and instead trains on a harder
+#   rear-saddle distribution so the policy practices pursuit/re-attack geometry.
+
+name: tailchase_s3_b050_hard_saddle_micro_sac_v1
+script: train_rllib
+
+output:
+  name: team01
+  tag: tailchase_s3_b050_hard_saddle_micro_sac_v1
+
+env:
+  observation_mode: tactical16
+  reward_module: student.my_reward_stage3_kill
+  target_mode: behavior_tree
+  target_behavior_dll: AIP_BASE_target_circle_debug.dll
+  bt_rule_xml: ..\..\Rule_Straight.xml
+  max_engage_time: 100.0
+  episode_step_limit: 6000
+
+env_config:
+  step_ratio: 6
+  action_slew_limit: 0.11
+  action_abs_limit: [0.50, 0.32, 0.40, 1.0]
+  action_postprocess:
+    enabled: true
+    los_assist:
+      enabled: true
+      az_ref_deg: 6.0
+      el_ref_deg: 5.0
+      roll_gain: 0.28
+      rudder_gain: 0.44
+      pitch_gain: 0.14
+      max_delta: 0.30
+      roll_sign: 1.0
+      rudder_sign: 1.0
+      pitch_sign: -1.0
+    bank_turn_assist:
+      enabled: true
+      disable_ata_deg: 0.0
+      az_ref_deg: 12.0
+      roll_gain: 0.09
+      pull_gain: 0.05
+    range_assist:
+      enabled: true
+      target_m: 760.0
+      band_m: 520.0
+      throttle_gain: 0.28
+      min_throttle_action: -0.10
+      max_throttle_action: 1.0
+    safety_filter:
+      enabled: true
+      floor_m: 4000.0
+      safe_m: 5750.0
+      pitch_up_gain: 0.54
+      nose_down_deg: 5.0
+      nose_down_pitch_gain: 0.44
+      roll_level_gain: 0.40
+      roll_ref_deg: 80.0
+      min_throttle_action: 0.62
+    emergency_recovery:
+      enabled: true
+      trigger_m: 4700.0
+      floor_m: 3200.0
+      pitch_up_action: 0.55
+      roll_level_gain: 0.35
+      roll_ref_deg: 80.0
+      min_throttle_action: 0.78
+  offensive_saddle:
+    enabled: true
+    range_m: [820.0, 1450.0]
+    aspect_deg: [4.0, 13.0]
+    altitude_m: 7400.0
+    target_speed_mps: 250.0
+    own_speed_mps: 268.0
+  range_discipline:
+    enabled: true
+    max_range_m: 3800.0
+    grow_steps: 55
+  wez:
+    angle_deg: 8.0
+    min_range_m: 152.4
+    max_range_m: 914.4
+  reward:
+    win_reward: 380.0
+    loss_reward: -340.0
+    draw_reward: -110.0
+    own_crash_penalty: -560.0
+    target_crash_reward: -20.0
+    survival_bonus: 0.004
+    step_penalty: -0.004
+    altitude_target_m: 7400.0
+    altitude_band_m: 2400.0
+    safe_altitude_m: 4700.0
+    altitude_hold_scale: 0.22
+    low_altitude_guard_scale: 6.3
+    attitude_envelope_guard_scale: 0.70
+    pitch_envelope_ref_deg: 25.0
+    roll_envelope_ref_deg: 82.0
+    nose_down_guard_scale: 2.1
+    nose_down_pitch_ref_deg: 12.0
+    descent_rate_guard_scale: 1.8
+    descent_rate_ref_mps: 38.0
+    action_pitch_down_guard_scale: 2.0
+    action_pitch_guard_scale: 0.17
+    action_roll_guard_scale: 0.17
+    action_roll_global_guard_scale: 0.03
+    track_angle_scale: 0.95
+    relative_position_scale: 1.65
+    closure_scale: 0.42
+    gunsnap_blue_scale: 1.70
+    gunsnap_red_scale: 0.10
+    too_close_scale: 1.50
+    damage_scale: 225.0
+    wez_band_scale: 1.15
+    wez_band_center_m: 720.0
+    wez_band_half_width_m: 520.0
+    wez_nose_half_angle_deg: 11.0
+    wez_hold_bonus: 1.00
+    official_wez_aim_scale: 3.70
+    official_wez_aim_half_angle_deg: 8.5
+    precision_aim_scale: 2.20
+    precision_aim_sigma_deg: 6.0
+    precision_aim_power: 1.0
+
+algo:
+  name: sac
+  framework: torch
+  lr: 2.0e-6
+  gamma: 0.99
+  train_batch_size: 256
+  minibatch_size: 256
+  tau: 0.005
+  target_entropy: auto
+  replay_buffer_capacity: 90000
+  mlp:
+    enabled: true
+    fcnet_hiddens: [256, 256]
+    fcnet_activation: relu
+    head_fcnet_hiddens: []
+    head_fcnet_activation: relu
+
+runtime:
+  iterations: 8
+  legacy_api_stack: true
+  num_env_runners: 0
+  num_envs_per_env_runner: 1
+  rollout_fragment_length: auto
+  batch_mode: truncate_episodes
+  save_lightweight_bundle: true
+  lightweight_bundle_frequency: 4
+  save_native_checkpoint: false
+  native_checkpoint_frequency: 40
+  init_bundle: artifacts/models/team01/tailchase_s3_b050_stabilize_micro_sac_v1/bundle_000005
+
+dashboard:
+  enabled: true
+  logdir: artifacts/dashboard
+
+policy_probe:
+  enabled: false
+
+engagement_log:
+  enabled: false
+
+notes: "Hard saddle micro: seed from safe b050_stabilize bundle_000005, late emergency enabled, harder rear-saddle starts, original Stage 3 kill reward, 8 iter, LR 2e-6."

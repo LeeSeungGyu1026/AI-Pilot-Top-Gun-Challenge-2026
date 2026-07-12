@@ -53,17 +53,28 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ownship-backend", choices=["rl", "bt", "hybrid"], default="rl")
     parser.add_argument(
         "--target-backend",
-        choices=["rl", "bt", "hybrid", "fixed", "loiter", "autopilot"],
+        choices=["rl", "bt", "bt_env", "hybrid", "fixed", "loiter", "autopilot"],
         default="bt",
         help=(
-            "Opponent type. rl/bt/hybrid use action providers; "
+            "Opponent type. rl/bt/hybrid use action providers; bt_env uses "
+            "the env-native behavior_tree target path used by training; "
             "fixed/loiter/autopilot are driven by the environment itself "
-            "(same as the corresponding training target_mode) — useful as an "
+            "(same as the corresponding training target_mode) - useful as an "
             "eval ladder: fixed -> loiter -> autopilot -> bt -> rl checkpoints."
         ),
     )
     parser.add_argument("--ownship-bundle-dir")
     parser.add_argument("--target-bundle-dir")
+    parser.add_argument(
+        "--ownship-explore",
+        action="store_true",
+        help="Sample stochastic RL actions for ownship instead of deterministic mean actions.",
+    )
+    parser.add_argument(
+        "--target-explore",
+        action="store_true",
+        help="Sample stochastic RL actions for an RL target instead of deterministic mean actions.",
+    )
     parser.add_argument("--ownship-bt-dll", default="AIP_BASE.dll")
     parser.add_argument("--target-bt-dll", default="AIP_BASE_target.dll")
     parser.add_argument("--bt-rule-xml", default=None)
@@ -80,6 +91,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--episode-step-limit", type=int, default=18000)
     parser.add_argument("--min-altitude", type=float, default=300.0)
     parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help=(
+            "Optional base seed for reproducible evaluation. Episode ep uses "
+            "seed + ep so policies/configs can be compared on the same starts."
+        ),
+    )
+    parser.add_argument(
         "--experiment-yaml",
         default=None,
         help=(
@@ -94,12 +114,13 @@ def parse_args() -> argparse.Namespace:
 
 
 # env_config keys pulled from --experiment-yaml so eval matches the training stage.
-# target_weave IS merged so eval tests the SAME (maneuvering) opponent as training — without
+# target_weave IS merged so eval tests the SAME (maneuvering) opponent as training - without
 # it, eval ran vs a straight target and gave misleading numbers. range_discipline is
 # deliberately EXCLUDED: it's a training-only shaping crutch; eval must measure natural win/loss.
 _EVAL_ENV_CONFIG_KEYS = (
     "offensive_saddle", "initial_scenario", "target_autopilot", "target_loiter",
     "target_weave", "wez", "step_ratio", "observation_size", "action_slew_limit",
+    "action_abs_limit", "action_postprocess",
 )
 
 
@@ -110,10 +131,29 @@ def _load_experiment_env_config(path: str) -> dict:
     return {k: ec[k] for k in _EVAL_ENV_CONFIG_KEYS if k in ec}
 
 
+def _load_experiment_eval_overrides(path: str) -> tuple[dict, str | None]:
+    import yaml
+    data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+    env = data.get("env", {}) or {}
+    merged = _load_experiment_env_config(path)
+    for key in (
+        "observation_mode",
+        "observation_module",
+        "target_behavior_dll",
+        "max_engage_time",
+        "episode_step_limit",
+        "min_altitude",
+    ):
+        if key in env:
+            merged[key] = env[key]
+    return merged, env.get("bt_rule_xml")
+
+
 def build_provider(side: str, backend: str, args: argparse.Namespace):
     bundle_dir = getattr(args, f"{side}_bundle_dir")
     bt_dll = getattr(args, f"{side}_bt_dll")
-    if backend in ("fixed", "loiter", "autopilot"):
+    explore = bool(getattr(args, f"{side}_explore", False))
+    if backend in ("fixed", "loiter", "autopilot", "bt_env"):
         return None  # environment-driven target, no action provider
     if backend == "bt":
         return BTActionProvider(dll_name=bt_dll)
@@ -123,6 +163,8 @@ def build_provider(side: str, backend: str, args: argparse.Namespace):
         return RLActionProvider(
             bundle_dir=bundle_dir,
             algorithm_factory=build_algorithm_from_bundle,
+            explore=explore,
+            output_action_space="rl",
         )
     if backend == "hybrid":
         if not bundle_dir:
@@ -131,6 +173,8 @@ def build_provider(side: str, backend: str, args: argparse.Namespace):
             primary_provider=RLActionProvider(
                 bundle_dir=bundle_dir,
                 algorithm_factory=build_algorithm_from_bundle,
+                explore=explore,
+                output_action_space="rl",
             ),
             secondary_provider=BTActionProvider(dll_name=bt_dll),
             mode=args.hybrid_mode,
@@ -144,7 +188,7 @@ def classify(info: dict) -> str:
     """Competition-aligned outcome.
 
     Forcing the opponent into the ground while surviving counts as a WIN (not a
-    draw) per the competition rules — the platform's own classifier scores it as
+    draw) per the competition rules - the platform's own classifier scores it as
     a draw, which undercounts true performance, so we correct it here.
     """
     own_hp = float(info.get("ownship_health", 0.0) or 0.0)
@@ -167,6 +211,17 @@ def main() -> int:
     out_dir = ROOT / "artifacts" / "eval" / eval_name
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    experiment_overrides: dict = {}
+    if args.experiment_yaml:
+        experiment_overrides, experiment_rule_xml = _load_experiment_eval_overrides(args.experiment_yaml)
+        if args.bt_rule_xml is None and experiment_rule_xml:
+            args.bt_rule_xml = experiment_rule_xml
+        if (
+            args.target_bt_dll == "AIP_BASE_target.dll"
+            and "target_behavior_dll" in experiment_overrides
+        ):
+            args.target_bt_dll = str(experiment_overrides["target_behavior_dll"])
+
     observation_hook = (
         load_observation_hook(args.observation_module) if args.observation_module else None
     )
@@ -180,18 +235,23 @@ def main() -> int:
         # provider-driven opponents use env mode "rl"; fixed/loiter/
         # autopilot are simulated by the env exactly as in training
         "target_mode": (
-            args.target_backend
+            "behavior_tree"
+            if args.target_backend == "bt_env"
+            else args.target_backend
             if args.target_backend in ("fixed", "loiter", "autopilot")
             else "rl"
         ),
+        "target_behavior_dll": args.target_bt_dll,
         "max_engage_time": args.max_engage_time,
         "episode_step_limit": args.episode_step_limit,
         "min_altitude": args.min_altitude,
     }
-    if args.experiment_yaml:
-        merged = _load_experiment_env_config(args.experiment_yaml)
-        eval_env_config.update(merged)
-        print(f"[eval] merged training geometry from {args.experiment_yaml}: {sorted(merged)}")
+    if experiment_overrides:
+        eval_env_config.update(experiment_overrides)
+        print(
+            f"[eval] merged training config from {args.experiment_yaml}: "
+            f"{sorted(experiment_overrides)}"
+        )
 
     episodes: list[dict] = []
     with activate_rule_xml(args.bt_rule_xml, ROOT):
@@ -207,7 +267,8 @@ def main() -> int:
         try:
             for ep in range(args.episodes):
                 start = time.time()
-                _, info = env.reset()
+                reset_seed = None if args.seed is None else int(args.seed) + ep
+                _, info = env.reset(seed=reset_seed)
                 terminated = truncated = False
                 total_reward = 0.0
                 steps = 0
@@ -252,6 +313,7 @@ def main() -> int:
         },
         "observation_mode": args.observation_mode,
         "observation_module": args.observation_module,
+        "seed": args.seed,
         "win_rate": outcomes["win"] / n,
         "loss_rate": outcomes["loss"] / n,
         "draw_rate": outcomes["draw"] / n,

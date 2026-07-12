@@ -1,0 +1,162 @@
+# Stage 3 v2: kill while preserving altitude.
+#
+# Seeded from tailchase_s2_pursuit_sac_v2, the first run that produced real
+# target-destroyed episodes. This stage narrows the training cone from 8 deg to
+# 6 deg and strengthens safety so kills do not come from dive-prone behavior.
+
+name: tailchase_s3_kill_sac_v2
+script: train_rllib
+
+output:
+  name: team01
+  tag: tailchase_s3_kill_sac_v2
+
+env:
+  observation_mode: tactical16
+  reward_module: student.my_reward_table1
+  target_mode: behavior_tree
+  target_behavior_dll: AIP_BASE_target_circle_debug.dll
+  bt_rule_xml: ..\..\Rule_Straight.xml
+  max_engage_time: 120.0
+  episode_step_limit: 7200
+
+env_config:
+  step_ratio: 6
+  action_slew_limit: 0.14
+  action_abs_limit: [0.56, 0.40, 0.42, 1.0]
+  action_postprocess:
+    enabled: true
+    los_assist:
+      enabled: true
+      az_ref_deg: 5.0
+      el_ref_deg: 5.0
+      roll_gain: 0.28
+      rudder_gain: 0.40
+      pitch_gain: 0.22
+      max_delta: 0.32
+      roll_sign: 1.0
+      rudder_sign: 1.0
+      pitch_sign: -1.0
+    bank_turn_assist:
+      enabled: true
+      disable_ata_deg: 0.0
+      az_ref_deg: 10.0
+      roll_gain: 0.08
+      pull_gain: 0.03
+    range_assist:
+      enabled: true
+      target_m: 610.0
+      band_m: 320.0
+      throttle_gain: 0.24
+      min_throttle_action: -0.1
+      max_throttle_action: 1.0
+    safety_filter:
+      enabled: true
+      floor_m: 3000.0
+      safe_m: 4600.0
+      pitch_up_gain: 0.45
+      nose_down_deg: 6.0
+      nose_down_pitch_gain: 0.35
+      roll_level_gain: 0.35
+      roll_ref_deg: 80.0
+      min_throttle_action: 0.55
+  offensive_saddle:
+    enabled: true
+    range_m: [450.0, 760.0]
+    aspect_deg: [0.0, 8.0]
+    altitude_m: 7200.0
+    target_speed_mps: 250.0
+    own_speed_mps: 265.0
+  range_discipline:
+    enabled: true
+    max_range_m: 3300.0
+    grow_steps: 45
+  wez:
+    angle_deg: 6.0
+    min_range_m: 152.4
+    max_range_m: 914.4
+  reward:
+    win_reward: 280.0
+    loss_reward: -180.0
+    draw_reward: -120.0
+    own_crash_penalty: -320.0
+    target_crash_reward: -20.0
+    guard_fail_penalty: -120.0
+    survival_bonus: 0.005
+    step_penalty: -0.004
+    adverse_angle_scale: 0.45
+    track_angle_scale: 0.85
+    relative_position_scale: 1.80
+    closure_scale: 0.45
+    gunsnap_blue_scale: 1.30
+    gunsnap_red_scale: 0.10
+    deck_scale: 0.80
+    too_close_scale: 1.50
+    damage_scale: 140.0
+    altitude_target_m: 7200.0
+    altitude_band_m: 2600.0
+    safe_altitude_m: 3400.0
+    altitude_hold_scale: 0.12
+    low_altitude_guard_scale: 5.0
+    attitude_envelope_guard_scale: 0.45
+    pitch_envelope_ref_deg: 30.0
+    roll_envelope_ref_deg: 100.0
+    nose_down_guard_scale: 1.10
+    nose_down_pitch_ref_deg: 18.0
+    descent_rate_guard_scale: 0.85
+    descent_rate_ref_mps: 55.0
+    speed_penalty_scale: 0.05
+    speed_target_kcas: 320.0
+    speed_band_kcas: 210.0
+    wez_band_scale: 1.20
+    wez_band_center_m: 570.0
+    wez_band_half_width_m: 380.0
+    wez_nose_half_angle_deg: 10.0
+    wez_hold_bonus: 0.80
+    official_wez_aim_scale: 3.00
+    official_wez_aim_half_angle_deg: 7.0
+    precision_aim_scale: 1.80
+    precision_aim_sigma_deg: 6.0
+    precision_aim_power: 1.0
+
+algo:
+  name: sac
+  framework: torch
+  lr: 1.5e-4
+  gamma: 0.99
+  train_batch_size: 256
+  minibatch_size: 256
+  tau: 0.005
+  target_entropy: auto
+  replay_buffer_capacity: 70000
+  mlp:
+    enabled: true
+    fcnet_hiddens: [256, 256]
+    fcnet_activation: relu
+    head_fcnet_hiddens: []
+    head_fcnet_activation: relu
+
+runtime:
+  iterations: 140
+  legacy_api_stack: true
+  num_env_runners: 0
+  num_envs_per_env_runner: 1
+  rollout_fragment_length: auto
+  batch_mode: truncate_episodes
+  save_lightweight_bundle: true
+  lightweight_bundle_frequency: 10
+  save_native_checkpoint: true
+  native_checkpoint_frequency: 40
+  init_bundle: artifacts/models/team01/tailchase_s2_pursuit_sac_v2
+
+dashboard:
+  enabled: true
+  logdir: artifacts/dashboard
+
+policy_probe:
+  enabled: false
+
+engagement_log:
+  enabled: false
+
+notes: "Stage 3 v2 kill: continue S2 v2, narrow WEZ 8->6 deg, strengthen altitude/safety, increase damage/hold pressure."

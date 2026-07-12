@@ -44,12 +44,14 @@ from dogfight.ai.training_record import save_training_record
 
 def _ensure_ray_runtime_env() -> None:
     """Restart Ray with local project paths available to worker actors."""
+    os.environ.setdefault("RAY_DEDUP_LOGS", "0")
     import ray
 
     ray.shutdown()
     ray.init(
         ignore_reinit_error=True,
         include_dashboard=False,
+        num_gpus=1,
         runtime_env={"env_vars": {"PYTHONPATH": os.environ["PYTHONPATH"]}},
     )
 
@@ -335,6 +337,27 @@ def _extract_custom_metrics(result: dict) -> dict:
         "ep_reward_damage":     metric("ep_reward_damage"),
         "ep_reward_safety":     metric("ep_reward_safety"),
         "ep_reward_survival":   metric("ep_reward_survival"),
+        "ep_reward_track_angle": metric("ep_reward_track_angle"),
+        "ep_reward_relative_position": metric("ep_reward_relative_position"),
+        "ep_reward_closure": metric("ep_reward_closure"),
+        "ep_reward_gunsnap_blue": metric("ep_reward_gunsnap_blue"),
+        "ep_reward_gunsnap_red": metric("ep_reward_gunsnap_red"),
+        "ep_reward_wez_band": metric("ep_reward_wez_band"),
+        "ep_reward_wez_hold": metric("ep_reward_wez_hold"),
+        "ep_reward_official_wez_aim": metric("ep_reward_official_wez_aim"),
+        "ep_reward_precision_aim": metric("ep_reward_precision_aim"),
+        "ep_reward_terminal": metric("ep_reward_terminal"),
+        "ep_reward_fast_kill_bonus": metric("ep_reward_fast_kill_bonus"),
+        "ep_reward_target_health_remaining": metric("ep_reward_target_health_remaining"),
+        "ep_reward_low_health_wez": metric("ep_reward_low_health_wez"),
+        "ep_reward_low_health_damage": metric("ep_reward_low_health_damage"),
+        "ep_reward_low_health_far": metric("ep_reward_low_health_far"),
+        "ep_reward_low_health_timeout": metric("ep_reward_low_health_timeout"),
+        "ep_reward_anchor_nose": metric("ep_reward_anchor_nose"),
+        "ep_reward_anchor_rear": metric("ep_reward_anchor_rear"),
+        "ep_reward_anchor_saddle": metric("ep_reward_anchor_saddle"),
+        "ep_reward_anchor_terminal": metric("ep_reward_anchor_terminal"),
+        "ep_reward_anchor_bad_geometry": metric("ep_reward_anchor_bad_geometry"),
         "ep_altitude_penalty_steps": metric("ep_altitude_penalty_steps"),
         "initial_alpha_deg":    metric("initial_alpha_deg"),
         "initial_ata_deg":      metric("initial_ata_deg"),
@@ -645,6 +668,14 @@ def parse_args():
             "--use-lstm-sac. Requires the RLLibLstm replay patch."
         ),
     )
+    parser.add_argument(
+        "--legacy-api-stack",
+        action="store_true",
+        help=(
+            "Disable RLlib's new RLModule/Learner and EnvRunner stack. "
+            "Useful when Ray 2.54 SAC build_algo() stalls before sampling."
+        ),
+    )
     parser.add_argument("--output-name", default="f16_single_agent")
     parser.add_argument("--output-tag", default="latest")
     parser.add_argument(
@@ -820,6 +851,7 @@ def _build_algorithm_args(args) -> dict:
         "lstm_cell_size": args.lstm_cell_size,
         "max_seq_len": args.max_seq_len,
         "debug_io": args.debug_io,
+        "legacy_api_stack": args.legacy_api_stack,
     }
 
 
@@ -999,7 +1031,9 @@ def _save_lightweight_bundle(
 def _save_native_checkpoint(algorithm, checkpoint_dir: Path, *, label: str) -> None:
     """Save an RLlib native checkpoint to the requested directory."""
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
-    checkpoint_path = algorithm.save(str(checkpoint_dir))
+    checkpoint_result = algorithm.save(str(checkpoint_dir))
+    checkpoint = getattr(checkpoint_result, "checkpoint", None)
+    checkpoint_path = getattr(checkpoint, "path", None) or str(checkpoint_result)
     print(f"{label} rllib checkpoint saved to {checkpoint_path}")
 
 
@@ -1169,7 +1203,9 @@ def _main(args):
         _run_with_tune(args, algorithm_name, config, env_config)
         return
 
+    print("[train_rllib] building RLlib algorithm...", flush=True)
     algorithm = config.build_algo()
+    print("[train_rllib] RLlib algorithm built.", flush=True)
     if args.restore_checkpoint:
         checkpoint_path = Path(args.restore_checkpoint)
         if not checkpoint_path.exists():
@@ -1195,7 +1231,19 @@ def _main(args):
         "win_rate", "loss_rate", "timeout_rate", "crash_rate",
         "ep_wez_steps", "ep_mean_distance", "ep_min_distance",
         "ep_reward_pursuit", "ep_reward_damage", "ep_reward_safety",
-        "ep_reward_survival", "ep_altitude_penalty_steps",
+        "ep_reward_survival",
+        "ep_reward_track_angle", "ep_reward_relative_position",
+        "ep_reward_closure", "ep_reward_gunsnap_blue",
+        "ep_reward_gunsnap_red", "ep_reward_wez_band",
+        "ep_reward_wez_hold", "ep_reward_official_wez_aim",
+        "ep_reward_precision_aim", "ep_reward_terminal",
+        "ep_reward_fast_kill_bonus", "ep_reward_target_health_remaining",
+        "ep_reward_low_health_wez", "ep_reward_low_health_damage",
+        "ep_reward_low_health_far", "ep_reward_low_health_timeout",
+        "ep_reward_anchor_nose", "ep_reward_anchor_rear",
+        "ep_reward_anchor_saddle", "ep_reward_anchor_terminal",
+        "ep_reward_anchor_bad_geometry",
+        "ep_altitude_penalty_steps",
         "initial_alpha_deg", "initial_ata_deg", "initial_aa_deg",
         "initial_distance_m", "final_ata_deg", "final_aa_deg",
         "headon_guard_fail",

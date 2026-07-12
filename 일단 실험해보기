@@ -1,0 +1,252 @@
+아래는 **“BT가 작동한다”**와 **“Blue/Red 둘 다 BT가 작동한다”**를 확인하기 위한 실행 매뉴얼입니다. 핵심은 run_local_dogfight.py로 Blue=BT, Red=BT 로컬 교전을 짧게 돌려보는 겁니다.
+목표
+1. BT DLL이 정상 로드된다.
+2. Blue 쪽 BT가 CreateBehaviorTree → Step → GetVP 흐름을 탄다.
+3. Red 쪽 BT도 CreateBehaviorTree → Step → GetVP 흐름을 탄다.
+4. 교전이 최소 몇 step 이상 진행되고, 로그가 생성된다.
+
+준비 위치
+PowerShell에서 여기로 이동합니다.
+cd C:\Users\biobe\desktop\aip\AIP_LIB\DogFightEnv\Release
+1단계: BT DLL 파일 확인
+먼저 아래 파일들이 있는지 확인합니다.
+dir AIP_BASE.dll
+dir AIP_BASE_target.dll
+보통 이 프로젝트에서:
+AIP_BASE.dll        = Blue/ownship 쪽 BT로 사용 가능
+AIP_BASE_target.dll = Red/target 쪽 BT로 사용 가능
+만약 둘 중 하나가 없으면 실행 전에 멈춰야 합니다.
+
+2단계: 짧은 BT vs BT 로컬 교전 실행
+아래 명령을 실행합니다.
+python run_local_dogfight.py --ownship-backend bt --target-backend bt --ownship-bt-dll AIP_BASE.dll --target-bt-dll AIP_BASE_target.dll --bt-rule-xml Rule_forTraining.xml --episode-step-limit 600 --save-log
+의미는 이렇습니다.
+--ownship-backend bt
+= Blue/내 기체를 BT로 조종
+
+--target-backend bt
+
+= Red/상대 기체를 BT로 조종
+
+--ownship-bt-dll AIP_BASE.dll
+= Blue가 사용할 BT DLL
+
+--target-bt-dll AIP_BASE_target.dll
+= Red가 사용할 BT DLL
+
+--bt-rule-xml Rule_forTraining.xml
+= BT Rule XML 적용
+
+--episode-step-limit 600
+= 너무 오래 돌리지 않고 짧게 검증
+
+--save-log
+= Tacview/CSV 로그 저장
+3단계: 성공 기준
+실행 중 에러 없이 진행되면 1차 성공입니다.
+특히 이런 에러가 없어야 합니다.
+BT DLL not found
+CreateBehaviorTree failed
+BT Step failed
+BT GetVP failed
+FDM output Fall
+DLL load failed
+정상이라면 콘솔에 episode step, reward, termination 같은 출력이 나오고 종료됩니다. --save-log를 켰으므로 로그 파일도 생성됩니다.
+4단계: Blue/Red 둘 다 BT인지 더 확실히 보기
+디버그 로그를 켜고 다시 실행합니다.
+$env:DOGFIGHT_BT_DEBUG="1"
+
+python run_local_dogfight.py `
+  --ownship-backend bt `
+  --target-backend bt `
+  --ownship-bt-dll AIP_BASE.dll `
+  --target-bt-dll AIP_BASE_target.dll `
+  --bt-rule-xml Rule_forTraining.xml `
+  --episode-step-limit 600 `
+  --save-log
+성공하면 stderr/콘솔에 이런 흐름이 보여야 합니다.
+[native_bt] loading dll=...AIP_BASE.dll
+[native_bt] before CreateBehaviorTree ... force=1
+[native_bt] after CreateBehaviorTree ...
+
+[native_bt] loading dll=...AIP_BASE_target.dll
+[native_bt] before CreateBehaviorTree ... force=2
+[native_bt] after CreateBehaviorTree ...
+여기서 핵심은:
+force=1 → Blue / ownship
+force=2 → Red / target
+둘 다 CreateBehaviorTree가 찍히면 Blue/Red 모두 BT 인스턴스가 생성된 것입니다. 이후 에러 없이 step이 진행되면 둘 다 BT가 작동한 것으로 봐도 됩니다.
+5단계: 로그 확인
+실행 후 artifacts 쪽에 로그가 생겼는지 확인합니다.
+dir artifacts
+또는 최근 생성 파일을 보려면:
+Get-ChildItem artifacts -Recurse | Sort-Object LastWriteTime -Descending | Select-Object -First 20
+ownship, target, summary 같은 CSV/JSON 로그가 생겼으면 교전 시뮬레이션이 실제로 진행된 겁니다.
+판정표
+DLL not found
+→ DLL 이름/위치 문제
+
+CreateBehaviorTree failed
+→ BT DLL 로드는 됐지만 BT 생성 실패
+
+BT Step failed
+→ BT가 조종 명령 계산 중 실패
+
+GetVP failed
+→ BT가 pursuit point 계산 중 실패
+
+Blue force=1만 보임
+→ Blue만 BT 생성됨, Red 설정 확인 필요
+
+force=1, force=2 둘 다 보임 + step 진행
+→ Blue/Red 모두 BT 작동 확인
+가장 추천하는 최종 검증 명령
+이걸 쓰면 됩니다.
+cd C:\Users\biobe\desktop\aip\AIP_LIB\DogFightEnv\Release
+$env:DOGFIGHT_BT_DEBUG="1"
+
+python run_local_dogfight.py `
+  --ownship-backend bt `
+  --target-backend bt `
+  --ownship-bt-dll AIP_BASE.dll `
+  --target-bt-dll AIP_BASE_target.dll `
+  --bt-rule-xml Rule_forTraining.xml `
+  --episode-step-limit 600 `
+  --save-log
+이 명령이 에러 없이 끝나고, 로그가 생기고, 디버그에 force=1, force=2가 둘 다 나오면 목적 달성입니다.
+
+cd C:\Users\biobe\desktop\aip\AIP_LIB\DogFightEnv\Release
+
+python run_local_dogfight.py 
+--ownship-backend bt 
+--target-backend bt 
+--ownship-bt-dll AIP_BASE.dll 
+--target-bt-dll AIP_BASE_target.dll 
+--bt-rule-xml Rule_forTraining.xml 
+--episode-step-limit 600 --save-log
+
+python run_local_dogfight.py --ownship-backend bt --target-backend bt --ownship-bt-dll AIP_BASE.dll --target-bt-dll AIP_BASE_target.dll --bt-rule-xml Rule_forTraining.xml --episode-step-limit 600 --save-log
+
+
+끝나면 최근 생성된 로그를 확인합니다.
+dir artifacts /s /od
+
+보통 ownship, target, summary 같은 CSV/JSON이 생깁니다.
+그 다음 replay viewer를 켭니다. 가장 간단한 명령은:
+python tools\web_log_viewer.py --logdir artifacts --port 7870
+
+또는 통합 dashboard로 replay 탭을 바로 열려면:
+python tools\dashboard.py --default-tab replay --logdir artifacts --port 7870
+
+그 다음 브라우저에서 엽니다.
+http://127.0.0.1:7870
+
+정리하면 네가 원하는 흐름은 이겁니다.
+BT vs BT 실행
+   ↓
+--save-log 로 CSV 로그 저장
+   ↓
+tools/web_log_viewer.py 또는 tools/dashboard.py 실행
+   ↓
+브라우저에서 비디오처럼 재생
+
+====================================================================================================================================================================================================
+(aip) C:\Users\biobe\desktop\aip\AIP_LIB\DogFightEnv\Release>python run_local_dogfight.py --ownship-backend bt --target-backend bt --ownship-bt-dll AIP_BASE.dll --target-bt-dll AIP_BASE_target.dll --bt-rule-xml Rule_forTraining.xml --episode-step-limit 600
+[bt_rule_manager] active Rule XML already in place: C:\Users\biobe\desktop\aip\AIP_LIB\DogFightEnv\Release\Rule_forTraining.xml
+init ID:1 Lat37.92355643001773 Lon128.18188127777776 Alt(meter)7000.0785355893395 Speed(m/sec)300.0
+
+
+     JSBSim Flight Dynamics Model v1.0.0 May 27 2026 16:13:38
+            [JSBSim-ML v2.0]
+
+JSBSim startup beginning ...
+
+init ID:1 Lat37.96855377446113 Lon128.18188127777776 Alt(meter)7002.8272734023885 Speed(m/sec)300.0
+total: 2
+Behavior Tree Initialized Successfully
+Behavior Tree Initialized Successfully
+runner:local/env:0      num_steps=[601] | total rewards=[29.4381] | termination= [episode step limit]
+simulation finished
+end_condition: episode step limit
+terminated: False truncated: True
+total_reward: 29.4381
+ownship_health: 1.0
+target_health: 1.0
+Remove Space Complete.
+====================================================================================================================================================================================================
+
+시뮬레이터 tick
+= JSBSim/FDM이 한 번 물리 계산하는 아주 작은 시간 단위
+
+RL/env step
+= 강화학습 환경이 action 하나를 받고, 여러 simulator tick을 진행한 뒤 observation/reward를 돌려주는 단위
+근데
+num_steps=[601]
+episode step limit 이거는 RL/env step임
+
+내부에서는 한 env step 동안 시뮬레이터가 여러 tick 돌 수 있습니다. 코드에 step_ratio라는 개념이 있어요.
+AI가 action 1번 냄
+↓
+시뮬레이터는 6 tick 진행
+↓
+그 다음 observation/reward 계산
+↓
+env step 1 증가
+
+이 프로젝트 매뉴얼 기준으로는 기본적으로 시뮬레이터는 60Hz 쪽 개념이 있고, 
+ACTION_REPEAT 또는 step_ratio를 6으로 맞추는 설명이 나옵니다. 그러면 대략:
+simulator tick = 1/60초
+env step = 6 tick = 약 0.1초
+
+
+
+
+python scripts\run_experiment.py experiments\student_sac_mlp.yaml
+
+iter=[30] | Steps=[3452] | Eps=[8] | Reward=[-1071.1464] | WinRate=[0.000] | WEZ_ep=[0.0] | Actor=[5.7327] | Critic=[0.0486] | Alpha=[0.5657] | ReplayMem=[2.1MB]
+iter: 에폭 느낌
+step: 지금까지 환경에서 총 3452 step을 경험했다는 뜻. 여기서 step은 비행 시뮬레이션 한 틱/의사결정 단위에 가깝다 함.
+eps: 한 판의 공중전
+WEZ_ep: episode에서 유의미하게 사격 가능 구역에 들어간 적이 얼마나 많나
+Actor: 행동을 고르는 신경망, SAC에서는 policy가 actor
+critic: Critic은 “이 행동/상태가 얼마나 좋은지 평가하는 신경망”이야. Reward를 바탕으로 가치 판단을 배우는 쪽. 값이 낮다고 무조건 좋은 건 아니지만, 발산하는 것 같지는 않아.
+alpha: SAC의 탐험 강도 조절값이야. 높으면 더 랜덤하게 탐험하고, 낮아지면 점점 덜 랜덤해져.
+
+runner:1/env:0 num_steps=[396] | total rewards=[-1052.2206] | termination= [ownship altitude below min]
+
+
+
+python scripts\run_experiment.py experiments\student_sac_mlp.yaml
+
+생존만 하는 학습중
+
+행동을 보니,
+ramp         [-0.056, 0.050, 0.029, -0.099]
+target_ahead [0.028, 0.055, 0.010, 0.041]
+target_left  [-1.103, 0.160, 0.942, 0.423]
+zero_hold    [-0.037, 0.005, 0.005, 0.051] 
+target_left에서 roll=-1.103, rudder = 0.942인데, 매우 큼: 적 방향/ 상대 위치에 반응해서 roll, rudder가 너무 큼
+-> 자세 유지 보상 추가
+roll      : 좌/우 롤 조종
+pitch     : 기수 올림/내림 조종
+rudder    : 방향타 조종
+throttle  : 추력 조종
+
+
+ramp, 
+target_ahead, 
+target_left, 
+zero_hold는 실제 전투 상황 이름이라기보다 policy를 점검하기 위한 고정 테스트 입력 이름이야.
+
+
+상대정보 폭주는 줄었음
+60초 근처까지 가는 episode가 생김
+하지만 안정 생존은 아님
+Actor가 커지며 학습 불안정
+지금은 멈추고 lr/entropy/reward terminal 조건 조정 권장
+
+
+
+python run_unreal_inference.py --mode rl --bundle-dir artifacts\models\test_mlp\sac_mlp_v1\bundle_000100 --observation-module student.my_observation --max-engage-time 60 --episode-step-limit 3600 --save-log
+
+python run_local_dogfight.py --ownship-backend rl --target-backend fixed --ownship-bundle-dir artifacts\models\test_mlp\sac_mlp_v1_survival_plus_pursuit\bundle_000200 --observation-mode custom --observation-module student.my_observation --max-engage-time 60 --episode-step-limit 3600 --save-log

@@ -339,6 +339,7 @@ class DogFightEnv(gym.Env):
             target_health,
         )
         reward, components = self._compute_step_reward(
+            action,
             terminated,
             truncated,
             end_condition,
@@ -474,12 +475,13 @@ class DogFightEnv(gym.Env):
 
     def _compute_step_reward(
         self,
+        action: np.ndarray,
         terminated: bool,
         truncated: bool,
         end_condition: str,
     ) -> tuple[float, dict]:
         _reward_fn = self._reward_fn if self._reward_fn is not None else compute_reward
-        return _reward_fn(
+        args = (
             self._ownship_state,
             self._target_state,
             self.ownship_damage,
@@ -491,6 +493,12 @@ class DogFightEnv(gym.Env):
             truncated,
             end_condition,
         )
+        try:
+            return _reward_fn(*args, action=action)
+        except TypeError as exc:
+            if "action" not in str(exc):
+                raise
+            return _reward_fn(*args)
 
     def _update_episode_metrics(
         self,

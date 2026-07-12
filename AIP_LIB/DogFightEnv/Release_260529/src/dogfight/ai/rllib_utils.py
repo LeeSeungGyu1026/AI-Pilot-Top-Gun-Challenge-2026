@@ -83,6 +83,12 @@ def build_algorithm_config(algorithm_name: str, env_name: str, env_config: dict,
     else:  # pragma: no cover
         raise ValueError(f"Unsupported algorithm: {algorithm_name}")
 
+    if args.get("legacy_api_stack") and hasattr(config, "api_stack"):
+        config = config.api_stack(
+            enable_rl_module_and_learner=False,
+            enable_env_runner_and_connector_v2=False,
+        )
+
     if (
         not args.get("use_lstm")
         and not args.get("use_lstm_sac")
@@ -90,7 +96,13 @@ def build_algorithm_config(algorithm_name: str, env_name: str, env_config: dict,
     ):
         config = _apply_mlp_model_config(config, args)
 
-    config = config.environment(env_name, env_config=env_config).framework(args["framework"])
+    config = config.environment(
+        env_name,
+        env_config=env_config,
+        disable_env_checking=True,
+    ).framework(args["framework"])
+    if hasattr(config, "resources"):
+        config = config.resources(num_gpus=1)
 
     if hasattr(config, "env_runners"):
         runner_args = {
@@ -139,6 +151,13 @@ def _build_replay_buffer_config(args: dict[str, Any]) -> dict[str, Any]:
     capacity = args.get("replay_buffer_capacity", args.get("replay_buffer_size"))
     if capacity is not None:
         replay_buffer_config["capacity"] = int(capacity)
+    if args.get("legacy_api_stack"):
+        buffer_type = replay_buffer_config.get("type")
+        if buffer_type in (None, "", "EpisodeReplayBuffer"):
+            replay_buffer_config["type"] = "MultiAgentPrioritizedReplayBuffer"
+            replay_buffer_config.setdefault("prioritized_replay_alpha", 0.6)
+            replay_buffer_config.setdefault("prioritized_replay_beta", 0.4)
+            replay_buffer_config.setdefault("prioritized_replay_eps", 1e-6)
     return replay_buffer_config
 
 
@@ -370,8 +389,22 @@ def _build_default_model_config(args: dict[str, Any], *, use_lstm: bool = False)
 
 
 def _apply_mlp_model_config(config, args: dict[str, Any]):
-    """Apply a non-recurrent RLlib DefaultModelConfig MLP."""
+    """Apply a non-recurrent MLP model config."""
+    if args.get("legacy_api_stack"):
+        return config.training(model=_build_legacy_mlp_model_config(args))
     return config.rl_module(model_config=_build_default_model_config(args))
+
+
+def _build_legacy_mlp_model_config(args: dict[str, Any]) -> dict[str, Any]:
+    """Build the old RLlib stack model dict from the shared MLP options."""
+    model_config = args.get("model_config") or {}
+    return {
+        "fcnet_hiddens": _parse_int_list(
+            model_config.get("fcnet_hiddens"),
+            [256, 256],
+        ),
+        "fcnet_activation": str(model_config.get("fcnet_activation") or "relu"),
+    }
 
 
 def _apply_lstm_model_config(config, args: dict[str, Any]):

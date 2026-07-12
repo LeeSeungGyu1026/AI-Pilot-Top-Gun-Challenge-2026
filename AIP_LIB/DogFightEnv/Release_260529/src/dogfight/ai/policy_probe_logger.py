@@ -227,9 +227,12 @@ class _PolicyActorView:
         self._torch = None
         self._columns = None
         if hasattr(algorithm, "get_module"):
-            self.module = algorithm.get_module("default_policy")
-            if self.module is None:
-                self.module = algorithm.get_module()
+            try:
+                self.module = algorithm.get_module("default_policy")
+                if self.module is None:
+                    self.module = algorithm.get_module()
+            except Exception:
+                self.module = None
         if self.module is not None:
             import torch
             from ray.rllib.core.columns import Columns
