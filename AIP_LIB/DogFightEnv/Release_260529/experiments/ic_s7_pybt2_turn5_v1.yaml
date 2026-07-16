@@ -1,0 +1,179 @@
+# ic_s7 PYTHON-BT curriculum, STAGE 2: turn-rate 5 deg/s, rear-saddle spawn.
+#
+# LADDER RESTORATION after the ic_s8 cliff (2026-07-05): ic_s8 v1/v2 jumped
+# three variables at once from the stage-1 champion (official mixed spawns +
+# uncapped 30 deg/s BT + 300s) and produced ZERO damage on either side —
+# 99.3% of episodes ended in discipline terminals at a flat -150, no gradient.
+# Diagnosis: curriculum cliff, not a BT-vs-self-play question. We return to
+# the original one-variable ladder:
+#
+#   stage 1  turn 3   (DONE: ic_s7_pybt1_turn3_v1, train 0.78, held-out 30/30)
+#   stage 2  turn 5   (THIS RUN — only change vs stage 1)
+#   stage 3  turn 8   (plant limit = effectively uncapped)
+#   then: official_spawn mix at mastered turn rate -> 300s -> cone 8->4->2
+#   then: defensive-spawn mix / frozen-checkpoint self-play for evasion.
+#
+# END GOAL (user 2026-07-05): gunnery AND evasion. Evasion training needs the
+# BT to actually threaten — WATCH ownship-destroyed share; some losses are
+# expected and wanted once the BT's turn rate lets it bring guns around.
+#
+#   python scripts\run_experiment.py experiments\ic_s7_pybt2_turn5_v1.yaml
+#
+# Gate to stage 3 (turn 8): train win >=0.75 sustained AND
+# end_condition_breakdown shows "target destroyed" dominating; spot a
+# jink-only eval for forgetting. Held-out eval = run_eval --experiment-yaml
+# this --target-backend autopilot (target_bt lives in env_config) at 300s.
+
+name: ic_s7_pybt2_turn5_v1
+script: train_rllib
+
+output:
+  name: team01
+  tag: ic_s7_pybt2_turn5_v1
+
+env:
+  observation_mode: custom
+  observation_module: student.my_observation
+  reward_module: student.codex_reward_v15_wez_only
+  target_mode: autopilot            # Python BT drives the autopilot; no BT DLL
+  max_engage_time: 120.0            # keep stage-1 timing; 300s is its own later rung
+  episode_step_limit: 3600
+
+env_config:
+  step_ratio: 6
+  observation_size: 26
+  action_slew_limit: 0.25
+  offensive_saddle:
+    enabled: true
+    range_m: [500.0, 900.0]         # the mastered band; safe (no dive trigger)
+    aspect_deg: [0.0, 25.0]
+    altitude_m: 7000.0
+    target_speed_mps: 250.0
+    own_speed_mps: 260.0            # ic_s5 champion's regime; 300 caused the v5 overshoot
+  range_discipline:
+    enabled: true
+    max_range_m: 3500.0             # close-saddle value (ic_s5); BT evade tops out ~290 m/s
+    grow_steps: 30                  # so a fleeing BT cannot outrun a committed chase
+  altitude_discipline:
+    enabled: true                   # backstop for the agent's own dive-chase; the BT
+    floor_m: 1200.0                 # itself cannot go below its 3000m command clamp
+    sustain_steps: 5
+  target_bt:                        # === the Python BT opponent ===
+    enabled: true
+    prob: 0.75                      # 25% of episodes = random-jink autopilot (below)
+    max_turn_rate_deg_s: 5.0        # STAGE 2 difficulty (the ONLY change vs stage 1)
+    max_climb_rate_mps: 40.0
+    min_altitude_m: 3000.0          # ground impact structurally impossible
+    max_altitude_m: 11000.0
+    threat_range_m: 1500.0
+    threat_rear_deg: 90.0
+    threat_track_deg: 40.0
+    evade_enabled: true
+    break_angle_deg: 100.0
+    jink_min_steps: 25
+    jink_max_steps: 70
+    evade_vertical_m: 500.0
+    lead_time_s: 3.0
+    speed_attack_mps: 260.0
+    speed_evade_mps: 270.0          # clamped <=290 in-wrapper (unreachable speed cmd
+                                    # = autopilot trades ~3km altitude for airspeed)
+    command_lead_max_deg: 45.0
+    mode_min_steps: 20
+  target_weave:                     # the 25% non-BT episodes: ic_s5 random jinker
+    enabled: true
+    random_jink: true
+    hdg_rate_min_deg: 2.0
+    hdg_rate_max_deg: 10.0
+    vert_rate_min_m: 4.0
+    vert_rate_max_m: 20.0
+    switch_min_steps: 20
+    switch_max_steps: 90
+    vertical_dev_max_m: 1200.0
+    straight_prob: 0.1
+  target_autopilot:
+    heading_cmd: 0.0
+    altitude_cmd: -7000.0
+    speed_cmd: 250.0
+  wez:
+    angle_deg: 8.0                  # bootstrap cone vs a reactive target;
+    min_range_m: 152.4              # narrow 8 -> 4 -> 2 in later rungs once
+    max_range_m: 914.4              # kills are established
+  reward:                           # exploit-free v15 block + v6 farm-safe dense tracking
+    win_reward: 220.0
+    forced_ground_reward: 0.0       # moot: the Python BT cannot reach the ground
+    loss_reward: -150.0
+    draw_reward: -100.0
+    damage_dealt_scale: 350.0
+    damage_taken_scale: 3.0         # keep low until kills are established (v7 lesson)
+    wez_entry_bonus: 0.0
+    wez_shaping_cone_deg: 90.0
+    wez_precision_bonus_min: 0.0
+    wez_precision_bonus_max: 0.0
+    fast_kill_bonus_max: 110.0
+    fast_kill_horizon_s: 120.0
+    fast_kill_bonus_floor_frac: 0.2
+    pbrs_gamma: 0.997
+    pbrs_ata_weight: 4.0
+    pbrs_range_weight: 1.0
+    pbrs_range_log_clip: 3.0
+    pbrs_alt_weight: 10.0
+    safety_floor_m: 300.0
+    safety_safe_m: 900.0
+    pursuit_dense_scale: 0.15       # v6 gates: gun-solution envelope only, farm-safe
+    pursuit_half_angle_deg: 20.0
+    pursuit_range_m: 1200.0
+    step_penalty: -0.005
+    survival_bonus: 0.0
+    damage_scale: 0.0
+    low_altitude_penalty: 0.0
+    aspect_cone_deg: 30.0
+    front_cone_penalty_scale: 0.1
+    rear_cone_reward_scale: 0.0
+    critical_alt_margin_m: 300.0
+    altitude_floor_penalty_min: 1.0
+    altitude_floor_penalty_max: 1000.0
+    reward_output_scale: 0.05
+
+algo:
+  name: ppo
+  framework: torch
+  lr: 3.0e-5
+  gamma: 0.997
+  gae_lambda: 0.95
+  clip_param: 0.08
+  train_batch_size: 16384
+  minibatch_size: 512
+  mlp:
+    enabled: true
+    fcnet_hiddens: [256, 256]
+    fcnet_activation: tanh
+    head_fcnet_hiddens: []
+    head_fcnet_activation: tanh
+    vf_share_layers: false
+
+runtime:
+  iterations: 150
+  num_env_runners: 4
+  num_envs_per_env_runner: 1
+  rollout_fragment_length: auto
+  batch_mode: truncate_episodes
+  save_lightweight_bundle: true
+  lightweight_bundle_frequency: 10
+  save_native_checkpoint: false
+  init_bundle: artifacts/models/team01/ic_s7_pybt1_turn3_v1/bundle_000150
+
+dashboard:
+  enabled: true
+  logdir: artifacts/dashboard
+
+policy_probe:
+  enabled: false
+
+engagement_log:
+  enabled: true
+  interval: 5
+  steps: 1200
+  episodes: 1
+  print: false
+
+notes: "ic_s7 STAGE 2 (turn 5 deg/s) — LADDER RESTORED after ic_s8 official-condition cliff (v1: 89% range-discipline; v2: 50/49% range/alt discipline, 0 damage BOTH sides, reward pinned -150.8 -> aborted at ~iter 45, no gradient existed). Single variable vs stage 1: max_turn_rate_deg_s 3->5. Seed = ic_s7_pybt1_turn3_v1/bundle_000150 (train 0.78, held-out 30/30 kills at 300s). Everything else byte-identical to stage 1 incl. rear-saddle 500-900m spawn, 8deg cone, 120s, 25% jink mix. SUCCESS = target-destroyed share dominates breakdown, train win >=0.75 sustained; expect/accept some ownship-destroyed (BT guns come around faster at 5 deg/s — that pressure is the start of evasion training). WATCH: if ownship-destroyed dominates AND win collapses, insert turn-4 half-rung; v14 farm signature (reward up / win flat); jink-episode win staying high (forgetting check). Next rungs: turn 8 -> official_spawn mix at mastered turn rate -> 300s -> cone 8->4->2 -> defensive-spawn/self-play for evasion."
